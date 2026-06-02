@@ -46,6 +46,9 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/agent/fs/tree", s.handleFsTree)
 	mux.HandleFunc("/agent/fs/download", s.handleFsDownload)
 	mux.HandleFunc("/agent/fs/upload", s.handleFsUpload)
+	// 历史会话（只读：回看当前工作目录的 claude 会话）
+	mux.HandleFunc("/agent/sessions/list", s.handleSessionsList)
+	mux.HandleFunc("/agent/sessions/read", s.handleSessionRead)
 	// 内置 Web 控制台（同源，免 CORS）；AGENT_UI=off 可关闭
 	if s.cfg.UIEnabled {
 		mux.HandleFunc("/", s.handleUI)

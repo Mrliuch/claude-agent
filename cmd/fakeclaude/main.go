@@ -39,7 +39,7 @@ func main() {
 			}
 		case "user":
 			emit(map[string]any{"type": "assistant", "message": map[string]any{"content": []any{
-				map[string]any{"type": "text", "text": "我来执行"},
+				map[string]any{"type": "text", "text": "On it — let me run that for you."},
 				map[string]any{"type": "tool_use", "id": "tu1", "name": "Bash", "input": map[string]any{"command": "echo hi"}},
 			}}})
 			emit(map[string]any{"type": "control_request", "request_id": "perm_1", "request": map[string]any{

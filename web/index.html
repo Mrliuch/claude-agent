@@ -7,19 +7,10 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>◤</text></svg>" />
 <style>
   :root {
-    --bg: #0b0e12;
-    --bg-2: #11151c;
-    --bg-3: #161b24;
-    --line: #232a36;
-    --line-2: #2f3848;
-    --txt: #d8dfea;
-    --dim: #8a96a8;
-    --faint: #586374;
-    --amber: #ffb454;
-    --amber-dim: #c98a3d;
-    --teal: #4fd6c4;
-    --red: #ff6b6b;
-    --violet: #9d8cff;
+    --bg: #0b0e12; --bg-2: #11151c; --bg-3: #161b24;
+    --line: #232a36; --line-2: #2f3848;
+    --txt: #d8dfea; --dim: #8a96a8; --faint: #586374;
+    --amber: #ffb454; --amber-dim: #c98a3d; --teal: #4fd6c4; --red: #ff6b6b; --violet: #9d8cff;
     --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
     --radius: 4px;
@@ -27,9 +18,7 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
-    font-family: var(--mono);
-    color: var(--txt);
-    background: var(--bg);
+    font-family: var(--mono); color: var(--txt); background: var(--bg);
     background-image:
       radial-gradient(1100px 520px at 78% -8%, rgba(255,180,84,.10), transparent 60%),
       radial-gradient(900px 600px at 0% 110%, rgba(79,214,196,.06), transparent 55%),
@@ -37,13 +26,9 @@
       linear-gradient(90deg, var(--line) 1px, transparent 1px);
     background-size: 100% 100%, 100% 100%, 46px 46px, 46px 46px;
     background-position: 0 0, 0 0, -1px -1px, -1px -1px;
-    font-size: 14px;
-    -webkit-font-smoothing: antialiased;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    font-size: 14px; -webkit-font-smoothing: antialiased;
+    display: flex; flex-direction: column; overflow: hidden;
   }
-  /* faint vignette + scanline texture */
   body::after {
     content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50;
     background:
@@ -52,15 +37,10 @@
     mix-blend-mode: overlay;
   }
 
-  /* ── header / control bar ─────────────────────────────── */
   header {
-    flex: 0 0 auto;
-    display: flex; align-items: center; gap: 18px;
-    padding: 0 18px; height: 56px;
+    flex: 0 0 auto; display: flex; align-items: center; gap: 14px; padding: 0 18px; height: 56px;
     background: linear-gradient(180deg, rgba(22,27,36,.92), rgba(17,21,28,.82));
-    border-bottom: 1px solid var(--line-2);
-    backdrop-filter: blur(8px);
-    position: relative; z-index: 20;
+    border-bottom: 1px solid var(--line-2); backdrop-filter: blur(8px); position: relative; z-index: 20;
   }
   .brand { display: flex; align-items: baseline; gap: 9px; user-select: none; white-space: nowrap; }
   .brand .mark { color: var(--amber); font-size: 18px; line-height: 1; text-shadow: 0 0 14px rgba(255,180,84,.55); }
@@ -68,41 +48,21 @@
   .brand span { color: var(--faint); font-size: 11px; letter-spacing: .22em; }
 
   .conn { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
-  .field {
-    display: flex; align-items: center; background: var(--bg); border: 1px solid var(--line-2);
-    border-radius: var(--radius); height: 32px; padding: 0 9px; gap: 7px; min-width: 0;
-  }
+  .field { display: flex; align-items: center; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--radius); height: 32px; padding: 0 9px; gap: 7px; min-width: 0; }
   .field:focus-within { border-color: var(--amber-dim); box-shadow: 0 0 0 1px rgba(255,180,84,.25); }
   .field label { color: var(--faint); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
-  .field input {
-    background: transparent; border: 0; outline: 0; color: var(--txt);
-    font-family: var(--mono); font-size: 12.5px; min-width: 60px;
-  }
-  .field.url { flex: 1 1 240px; }
-  .field.url input { width: 100%; }
-  .field.tok { flex: 0 1 200px; }
-
+  .field input { background: transparent; border: 0; outline: 0; color: var(--txt); font-family: var(--mono); font-size: 12.5px; min-width: 60px; }
+  .field.url { flex: 1 1 240px; } .field.url input { width: 100%; } .field.tok { flex: 0 1 200px; }
   .spacer { flex: 1; }
 
-  .status {
-    display: inline-flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: .14em;
-    text-transform: uppercase; color: var(--dim); white-space: nowrap;
-  }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); box-shadow: 0 0 0 0 transparent; }
-  .status.on  .dot { background: var(--teal);  animation: pulse 2s infinite; }
-  .status.on  { color: var(--teal); }
-  .status.busy .dot { background: var(--amber); animation: pulse 1s infinite; }
-  .status.busy { color: var(--amber); }
-  .status.off .dot { background: var(--red); }
-  .status.off { color: var(--red); }
+  .status { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .status.on .dot { background: var(--teal); animation: pulse 2s infinite; } .status.on { color: var(--teal); }
+  .status.busy .dot { background: var(--amber); animation: pulse 1s infinite; } .status.busy { color: var(--amber); }
+  .status.off .dot { background: var(--red); } .status.off { color: var(--red); }
   @keyframes pulse { 0%{box-shadow:0 0 0 0 currentColor} 70%{box-shadow:0 0 0 6px transparent} 100%{box-shadow:0 0 0 0 transparent} }
 
-  button {
-    font-family: var(--mono); cursor: pointer; border-radius: var(--radius);
-    border: 1px solid var(--line-2); background: var(--bg-3); color: var(--txt);
-    height: 32px; padding: 0 13px; font-size: 12px; letter-spacing: .08em;
-    transition: border-color .15s, background .15s, color .15s, transform .05s;
-  }
+  button { font-family: var(--mono); cursor: pointer; border-radius: var(--radius); border: 1px solid var(--line-2); background: var(--bg-3); color: var(--txt); height: 32px; padding: 0 13px; font-size: 12px; letter-spacing: .08em; transition: border-color .15s, background .15s, color .15s, transform .05s; }
   button:hover { border-color: var(--amber-dim); color: #fff; }
   button:active { transform: translateY(1px); }
   button:disabled { opacity: .4; cursor: not-allowed; }
@@ -110,215 +70,132 @@
   button.primary:hover { color: #20160a; filter: brightness(1.06); }
   button.ghost { background: transparent; }
   .iconbtn { width: 32px; padding: 0; font-size: 15px; }
+  #langBtn { font-size: 12px; letter-spacing: .04em; }
 
-  /* ── body layout ─────────────────────────────── */
   .body { flex: 1 1 auto; display: flex; min-height: 0; position: relative; z-index: 10; }
-
   main { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
 
   .stream { flex: 1 1 auto; overflow-y: auto; padding: 22px clamp(16px, 5vw, 64px); scroll-behavior: smooth; }
-  .stream::-webkit-scrollbar { width: 10px; }
+  .stream::-webkit-scrollbar, .filelist::-webkit-scrollbar, .vbody::-webkit-scrollbar { width: 10px; }
   .stream::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 10px; border: 3px solid var(--bg); }
 
-  .empty {
-    height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    color: var(--faint); gap: 14px; text-align: center; user-select: none;
-  }
+  .empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--faint); gap: 14px; text-align: center; user-select: none; }
   .empty .big { font-size: 40px; color: var(--amber); text-shadow: 0 0 24px rgba(255,180,84,.4); }
   .empty p { margin: 0; font-size: 12px; letter-spacing: .12em; line-height: 1.9; }
-  .empty kbd {
-    font-family: var(--mono); background: var(--bg-3); border: 1px solid var(--line-2);
-    border-bottom-width: 2px; border-radius: 3px; padding: 1px 6px; color: var(--dim);
-  }
+  .empty kbd { font-family: var(--mono); background: var(--bg-3); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 3px; padding: 1px 6px; color: var(--dim); }
 
   .msg { max-width: 880px; margin: 0 auto 16px; animation: rise .28s ease both; }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-
-  .tag {
-    display: inline-flex; align-items: center; gap: 7px; font-size: 10.5px; letter-spacing: .18em;
-    text-transform: uppercase; color: var(--faint); margin-bottom: 7px;
-  }
+  .tag { display: inline-flex; align-items: center; gap: 7px; font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--faint); margin-bottom: 7px; }
   .tag::before { content: ""; width: 14px; height: 1px; background: var(--line-2); }
-
-  .bubble.user {
-    margin-left: auto; max-width: 70%; background: linear-gradient(180deg, rgba(255,180,84,.13), rgba(255,180,84,.06));
-    border: 1px solid rgba(255,180,84,.3); border-radius: 10px 10px 2px 10px;
-    padding: 11px 14px; color: #ffe9cc; white-space: pre-wrap; word-break: break-word; font-family: var(--sans);
-  }
-  .msg.right { text-align: right; }
-  .msg.right .tag { color: var(--amber-dim); justify-content: flex-end; }
-  .msg.right .tag::before { display: none; }
-  .msg.right .tag::after { content: ""; width: 14px; height: 1px; background: rgba(255,180,84,.4); }
-
-  .prose {
-    font-family: var(--sans); line-height: 1.7; color: var(--txt); white-space: pre-wrap; word-break: break-word;
-    border-left: 2px solid var(--teal); padding: 2px 0 2px 16px;
-  }
-  .prose pre {
-    font-family: var(--mono); background: #0a0d12; border: 1px solid var(--line); border-radius: 6px;
-    padding: 11px 13px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; margin: 9px 0; white-space: pre;
-  }
+  .bubble.user { margin-left: auto; max-width: 70%; background: linear-gradient(180deg, rgba(255,180,84,.13), rgba(255,180,84,.06)); border: 1px solid rgba(255,180,84,.3); border-radius: 10px 10px 2px 10px; padding: 11px 14px; color: #ffe9cc; white-space: pre-wrap; word-break: break-word; font-family: var(--sans); }
+  .msg.right { text-align: right; } .msg.right .tag { color: var(--amber-dim); justify-content: flex-end; }
+  .msg.right .tag::before { display: none; } .msg.right .tag::after { content: ""; width: 14px; height: 1px; background: rgba(255,180,84,.4); }
+  .prose { font-family: var(--sans); line-height: 1.7; color: var(--txt); white-space: pre-wrap; word-break: break-word; border-left: 2px solid var(--teal); padding: 2px 0 2px 16px; }
+  .prose pre { font-family: var(--mono); background: #0a0d12; border: 1px solid var(--line); border-radius: 6px; padding: 11px 13px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; margin: 9px 0; white-space: pre; }
   .prose code { font-family: var(--mono); background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 3px; font-size: .92em; }
   .prose pre code { background: none; padding: 0; }
-
-  .tool {
-    border: 1px solid var(--line-2); border-radius: 7px; overflow: hidden; margin: 4px 0;
-    background: linear-gradient(180deg, var(--bg-3), var(--bg-2));
-  }
-  .tool > summary {
-    display: flex; align-items: center; gap: 9px; padding: 9px 12px; cursor: pointer; list-style: none;
-    font-size: 12px; user-select: none;
-  }
+  .tool { border: 1px solid var(--line-2); border-radius: 7px; overflow: hidden; margin: 4px 0; background: linear-gradient(180deg, var(--bg-3), var(--bg-2)); }
+  .tool > summary { display: flex; align-items: center; gap: 9px; padding: 9px 12px; cursor: pointer; list-style: none; font-size: 12px; user-select: none; }
   .tool > summary::-webkit-details-marker { display: none; }
-  .tool .glyph { color: var(--violet); }
-  .tool .tname { font-weight: 600; letter-spacing: .04em; color: #cdbfff; }
+  .tool .glyph { color: var(--violet); } .tool .tname { font-weight: 600; letter-spacing: .04em; color: #cdbfff; }
   .tool .hint { color: var(--faint); margin-left: auto; font-size: 11px; }
-  .tool[open] .hint .chev { transform: rotate(90deg); }
-  .tool .hint .chev { display: inline-block; transition: transform .15s; }
-  .tool .payload {
-    border-top: 1px solid var(--line); background: #0a0d12; padding: 11px 13px; margin: 0;
-    font-family: var(--mono); font-size: 12px; line-height: 1.55; overflow-x: auto; color: var(--dim); white-space: pre;
-  }
-
-  .result {
-    border-radius: 7px; border: 1px solid var(--line); background: #0a0d12;
-    padding: 10px 13px; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
-    color: var(--txt); max-height: 360px; overflow: auto;
-  }
+  .tool[open] .hint .chev { transform: rotate(90deg); } .tool .hint .chev { display: inline-block; transition: transform .15s; }
+  .tool .payload { border-top: 1px solid var(--line); background: #0a0d12; padding: 11px 13px; margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.55; overflow-x: auto; color: var(--dim); white-space: pre; }
+  .result { border-radius: 7px; border: 1px solid var(--line); background: #0a0d12; padding: 10px 13px; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: var(--txt); max-height: 360px; overflow: auto; }
   .result.err { border-color: rgba(255,107,107,.5); background: rgba(255,107,107,.06); color: #ffc9c9; }
-
-  .endline {
-    max-width: 880px; margin: 4px auto 18px; display: flex; align-items: center; gap: 10px;
-    color: var(--faint); font-size: 11px; letter-spacing: .06em;
-  }
+  .endline { max-width: 880px; margin: 4px auto 18px; display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 11px; letter-spacing: .06em; }
   .endline::before, .endline::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-  .endline.err { color: var(--red); }
-  .endline b { color: var(--teal); font-weight: 600; }
-
-  .sysnote {
-    max-width: 880px; margin: 0 auto 16px; text-align: center; color: var(--faint);
-    font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
-  }
+  .endline.err { color: var(--red); } .endline b { color: var(--teal); font-weight: 600; }
+  .sysnote { max-width: 880px; margin: 0 auto 16px; text-align: center; color: var(--faint); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
   .sysnote.err { color: var(--red); }
 
-  /* ── composer ─────────────────────────────── */
-  .composer { flex: 0 0 auto; border-top: 1px solid var(--line-2); background: rgba(11,14,18,.9); padding: 12px clamp(16px,5vw,64px) 16px; }
+  .composer { flex: 0 0 auto; border-top: 1px solid var(--line-2); background: rgba(11,14,18,.9); padding: 11px clamp(16px,5vw,64px) 16px; }
   .composer-inner { max-width: 880px; margin: 0 auto; }
-  .prompt {
-    display: flex; align-items: flex-end; gap: 10px; background: var(--bg-2); border: 1px solid var(--line-2);
-    border-radius: 8px; padding: 9px 11px; transition: border-color .15s, box-shadow .15s;
-  }
+  .cmdbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
+  .cmd { height: 26px; padding: 0 11px; border-radius: 13px; border: 1px solid var(--line-2); background: var(--bg-2); color: var(--dim); font-family: var(--mono); font-size: 11.5px; letter-spacing: .02em; cursor: pointer; transition: border-color .14s, color .14s; }
+  .cmd:hover:not(:disabled) { border-color: var(--teal); color: var(--teal); }
+  .cmd:disabled { opacity: .38; cursor: not-allowed; }
+  .prompt { display: flex; align-items: flex-end; gap: 10px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 8px; padding: 9px 11px; transition: border-color .15s, box-shadow .15s; }
   .prompt:focus-within { border-color: var(--amber-dim); box-shadow: 0 0 0 1px rgba(255,180,84,.2), 0 0 30px rgba(255,180,84,.06); }
   .caret { color: var(--amber); font-weight: 700; padding-bottom: 3px; user-select: none; }
-  .caret::after { content: "▌"; animation: blink 1.1s steps(1) infinite; }
-  @keyframes blink { 50% { opacity: 0; } }
-  textarea#input {
-    flex: 1; resize: none; background: transparent; border: 0; outline: 0; color: var(--txt);
-    font-family: var(--mono); font-size: 13.5px; line-height: 1.55; max-height: 180px; padding: 2px 0;
-  }
+  .caret::after { content: "▌"; animation: blink 1.1s steps(1) infinite; } @keyframes blink { 50% { opacity: 0; } }
+  textarea#input { flex: 1; resize: none; background: transparent; border: 0; outline: 0; color: var(--txt); font-family: var(--mono); font-size: 13.5px; line-height: 1.55; max-height: 180px; padding: 2px 0; }
   textarea#input::placeholder { color: var(--faint); }
-  .composer .meta { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; padding: 0 2px; }
-  .composer .meta .cwd { color: var(--faint); font-size: 11px; letter-spacing: .04em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .composer .meta { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; padding: 0 2px; gap: 12px; }
+  .composer .meta .cwd { color: var(--faint); font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .composer .meta .cwd b { color: var(--teal); font-weight: 500; }
   .composer .meta .hk { color: var(--faint); font-size: 10.5px; letter-spacing: .1em; white-space: nowrap; }
 
-  /* ── files drawer ─────────────────────────────── */
-  aside {
-    flex: 0 0 auto; width: 0; overflow: hidden; border-left: 1px solid var(--line-2);
-    background: var(--bg-2); transition: width .22s ease; display: flex; flex-direction: column;
-  }
-  aside.open { width: 340px; }
-  .drawer-head { flex: 0 0 auto; height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--line); }
-  .drawer-head .t { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--amber); }
-  .crumbs { flex: 0 0 auto; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow-x: auto; }
-  .crumbs a { color: var(--teal); text-decoration: none; cursor: pointer; }
-  .crumbs a:hover { text-decoration: underline; }
+  aside { flex: 0 0 auto; width: 0; overflow: hidden; border-left: 1px solid var(--line-2); background: var(--bg-2); transition: width .22s ease; display: flex; flex-direction: column; }
+  aside.open { width: 350px; }
+  .drawer-head { flex: 0 0 auto; height: 44px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 12px; border-bottom: 1px solid var(--line); }
+  .tabs { display: flex; gap: 4px; }
+  .tab { height: 26px; padding: 0 11px; border-radius: 5px; border: 1px solid transparent; background: transparent; color: var(--dim); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; cursor: pointer; }
+  .tab:hover { color: var(--txt); border-color: var(--line-2); }
+  .tab.active { color: var(--amber); border-color: var(--line-2); background: var(--bg-3); }
+  .panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .panel.hidden { display: none; }
+  .crumbs, .sess-cwd { flex: 0 0 auto; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow-x: auto; }
+  .crumbs a { color: var(--teal); text-decoration: none; cursor: pointer; } .crumbs a:hover { text-decoration: underline; }
   .crumbs span.sep { color: var(--faint); margin: 0 5px; }
+  .sess-cwd b { color: var(--teal); font-weight: 500; }
   .filelist { flex: 1 1 auto; overflow-y: auto; padding: 6px; }
-  .filelist::-webkit-scrollbar { width: 9px; }
   .filelist::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 9px; border: 3px solid var(--bg-2); }
-  .frow {
-    display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 5px; cursor: pointer; font-size: 12.5px;
-  }
+  .frow { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 5px; cursor: pointer; font-size: 12.5px; }
   .frow:hover { background: var(--bg-3); }
-  .frow .ic { width: 16px; text-align: center; flex: 0 0 auto; }
-  .frow.dir .ic { color: var(--amber); }
-  .frow.file .ic { color: var(--faint); }
+  .frow .ic { width: 16px; text-align: center; flex: 0 0 auto; } .frow.dir .ic { color: var(--amber); } .frow.file .ic { color: var(--faint); }
   .frow .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .frow .dl { color: var(--faint); opacity: 0; font-size: 13px; }
-  .frow:hover .dl { opacity: 1; }
-  .frow .dl:hover { color: var(--teal); }
+  .frow .dl { color: var(--faint); opacity: 0; font-size: 13px; } .frow:hover .dl { opacity: 1; } .frow .dl:hover { color: var(--teal); }
   .frow .sz { color: var(--faint); font-size: 10.5px; flex: 0 0 auto; }
-  .filemsg { color: var(--faint); font-size: 12px; padding: 16px; text-align: center; }
+  .filemsg { color: var(--faint); font-size: 12px; padding: 16px; text-align: center; line-height: 1.7; }
+  .srow { padding: 9px 10px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+  .srow:hover { background: var(--bg-3); border-color: var(--line-2); }
+  .srow .st { font-size: 12.5px; color: var(--txt); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 4px; }
+  .srow .sm { font-size: 10.5px; color: var(--faint); display: flex; gap: 10px; align-items: center; }
+  .srow .sm .cur { color: var(--teal); border: 1px solid rgba(79,214,196,.4); border-radius: 9px; padding: 0 6px; }
 
-  /* ── modals ─────────────────────────────── */
-  .overlay {
-    position: fixed; inset: 0; z-index: 100; display: none; align-items: center; justify-content: center;
-    background: rgba(5,7,10,.72); backdrop-filter: blur(3px); padding: 20px;
-  }
-  .overlay.show { display: flex; animation: fade .15s ease; }
-  @keyframes fade { from { opacity: 0; } }
-
-  .modal {
-    width: min(560px, 96vw); background: var(--bg-2); border: 1px solid var(--line-2);
-    border-radius: 12px; box-shadow: 0 30px 80px rgba(0,0,0,.6); overflow: hidden; animation: pop .2s ease;
-  }
+  .overlay { position: fixed; inset: 0; z-index: 100; display: none; align-items: center; justify-content: center; background: rgba(5,7,10,.72); backdrop-filter: blur(3px); padding: 20px; }
+  .overlay.show { display: flex; animation: fade .15s ease; } @keyframes fade { from { opacity: 0; } }
+  .modal { width: min(560px, 96vw); background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: 0 30px 80px rgba(0,0,0,.6); overflow: hidden; animation: pop .2s ease; }
   @keyframes pop { from { transform: scale(.96) translateY(8px); opacity: 0; } }
-
-  .perm .ribbon {
-    background: repeating-linear-gradient(45deg, rgba(255,180,84,.16) 0 12px, rgba(255,180,84,.06) 12px 24px);
-    border-bottom: 1px solid rgba(255,180,84,.35); padding: 13px 18px;
-    display: flex; align-items: center; gap: 11px;
-  }
+  .perm .ribbon { background: repeating-linear-gradient(45deg, rgba(255,180,84,.16) 0 12px, rgba(255,180,84,.06) 12px 24px); border-bottom: 1px solid rgba(255,180,84,.35); padding: 13px 18px; display: flex; align-items: center; gap: 11px; }
   .perm .ribbon .icn { color: var(--amber); font-size: 18px; text-shadow: 0 0 14px rgba(255,180,84,.5); }
   .perm .ribbon .h { letter-spacing: .2em; text-transform: uppercase; font-size: 12px; color: var(--amber); font-weight: 600; }
-  .perm .pbody { padding: 16px 18px; }
-  .perm .toolline { font-size: 14px; margin-bottom: 4px; }
-  .perm .toolline b { color: var(--violet); }
+  .perm .pbody { padding: 16px 18px; } .perm .toolline { font-size: 14px; margin-bottom: 4px; } .perm .toolline b { color: var(--violet); }
   .perm .desc { color: var(--dim); font-size: 12.5px; margin-bottom: 12px; line-height: 1.6; }
-  .perm pre {
-    font-family: var(--mono); background: #0a0d12; border: 1px solid var(--line); border-radius: 6px;
-    padding: 11px 13px; font-size: 12px; line-height: 1.55; max-height: 240px; overflow: auto; margin: 0; white-space: pre; color: var(--dim);
-  }
+  .perm pre, .viewer .vbody pre { font-family: var(--mono); background: #0a0d12; border: 1px solid var(--line); border-radius: 6px; padding: 11px 13px; font-size: 12px; line-height: 1.55; max-height: 240px; overflow: auto; margin: 0; white-space: pre; color: var(--dim); }
   .perm .actions { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); }
   .perm .actions button { flex: 1; height: 40px; font-size: 13px; }
-  button.deny { border-color: rgba(255,107,107,.5); color: #ffb0b0; }
-  button.deny:hover { background: rgba(255,107,107,.12); color: #fff; }
-  button.allow { background: linear-gradient(180deg, #5be0cf, #36b9a8); color: #06201c; border-color: #76e9da; font-weight: 600; }
-
-  .viewer { width: min(820px, 96vw); max-height: 86vh; display: flex; flex-direction: column; }
+  button.deny { border-color: rgba(255,107,107,.5); color: #ffb0b0; } button.deny:hover { background: rgba(255,107,107,.12); color: #fff; }
+  button.allow, button.resume { background: linear-gradient(180deg, #5be0cf, #36b9a8); color: #06201c; border-color: #76e9da; font-weight: 600; }
+  button.resume { height: 30px; }
+  .viewer { width: min(860px, 96vw); max-height: 86vh; display: flex; flex-direction: column; }
   .viewer .vhead { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
   .viewer .vhead .vn { flex: 1; font-size: 13px; color: var(--teal); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .viewer .vbody { overflow: auto; padding: 14px 16px; }
-  .viewer .vbody pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; white-space: pre; margin: 0; color: var(--txt); }
+  .viewer .vbody { overflow: auto; padding: 14px 18px; }
+  .viewer .vbody > pre { color: var(--txt); white-space: pre; }
   .viewer .trunc { color: var(--amber); font-size: 11px; padding: 8px 16px; border-top: 1px solid var(--line); }
+  .transcript .msg { max-width: 100%; margin: 0 0 14px; }
 
-  /* ── toast ─────────────────────────────── */
-  #toast {
-    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px);
-    background: var(--bg-3); border: 1px solid var(--red); color: #ffc9c9; padding: 10px 16px;
-    border-radius: 8px; font-size: 12.5px; z-index: 200; opacity: 0; pointer-events: none;
-    transition: opacity .2s, transform .2s; max-width: 80vw;
-  }
+  #toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-3); border: 1px solid var(--red); color: #ffc9c9; padding: 10px 16px; border-radius: 8px; font-size: 12.5px; z-index: 200; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; max-width: 80vw; }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  @media (max-width: 720px) {
-    .field.url, .brand span { display: none; }
-    aside.open { width: 100%; position: absolute; right: 0; top: 0; bottom: 0; z-index: 30; }
-  }
+  @media (max-width: 760px) { .field.url, .brand span { display: none; } aside.open { width: 100%; position: absolute; right: 0; top: 0; bottom: 0; z-index: 30; } }
 </style>
 </head>
 <body>
   <header>
     <div class="brand"><span class="mark">◤</span><b>CLAUDE-AGENT</b><span>CONSOLE</span></div>
     <div class="conn">
-      <div class="field url"><label>agent</label><input id="base" spellcheck="false" placeholder="http://host:8765" /></div>
-      <div class="field tok"><label>token</label><input id="token" type="password" spellcheck="false" placeholder="AGENT_TOKEN" /></div>
+      <div class="field url"><label data-i18n="lbl_agent">agent</label><input id="base" spellcheck="false" placeholder="http://host:8765" /></div>
+      <div class="field tok"><label data-i18n="lbl_token">token</label><input id="token" type="password" spellcheck="false" placeholder="AGENT_TOKEN" /></div>
     </div>
     <div class="spacer"></div>
     <div class="status off" id="status"><span class="dot"></span><span id="statusText">offline</span></div>
     <button class="primary" id="connectBtn">CONNECT</button>
-    <button class="iconbtn ghost" id="filesBtn" title="文件管理">▤</button>
+    <button class="iconbtn ghost" id="langBtn" title="Language">中</button>
+    <button class="iconbtn ghost" id="filesBtn" data-i18n-title="t_panel" title="文件 / 会话">▤</button>
   </header>
 
   <div class="body">
@@ -326,23 +203,22 @@
       <div class="stream" id="stream">
         <div class="empty" id="empty">
           <div class="big">◤</div>
-          <p>
-            REMOTE CLAUDE CODE · OVER WEBSOCKET<br/>
-            填入 <kbd>agent</kbd> 地址与 <kbd>token</kbd>，按 <kbd>CONNECT</kbd> 接入目标机<br/>
-            危险操作会在此弹窗请求授权 — 你说了才算
+          <p data-i18n-html="empty_html">
+            REMOTE CLAUDE CODE · OVER WEBSOCKET<br/>填入 <kbd>地址</kbd> 与 <kbd>令牌</kbd>，按 <kbd>连接</kbd> 接入目标机<br/>危险操作会在此弹窗请求授权 — 你说了才算
           </p>
         </div>
       </div>
       <div class="composer">
         <div class="composer-inner">
+          <div class="cmdbar" id="cmdbar"></div>
           <div class="prompt">
             <span class="caret"></span>
-            <textarea id="input" rows="1" placeholder="给目标机上的 claude 下达指令…" disabled></textarea>
-            <button class="primary" id="sendBtn" disabled>SEND</button>
+            <textarea id="input" rows="1" disabled></textarea>
+            <button class="primary" id="sendBtn" data-i18n="btn_send" disabled>SEND</button>
           </div>
           <div class="meta">
-            <div class="cwd" id="cwd">未连接</div>
-            <div class="hk"><b>Enter</b> 发送 · <b>Shift+Enter</b> 换行 · <b>⌘/Ctrl+K</b> 新会话</div>
+            <div class="cwd" id="cwd"></div>
+            <div class="hk" data-i18n-html="hotkeys_html"></div>
           </div>
         </div>
       </div>
@@ -350,28 +226,37 @@
 
     <aside id="drawer">
       <div class="drawer-head">
-        <span class="t">FILES</span>
-        <div class="spacer" style="flex:1"></div>
-        <button class="iconbtn ghost" id="fsRefresh" title="刷新">↻</button>
-        <button class="iconbtn ghost" id="fsClose" title="关闭">✕</button>
+        <div class="tabs">
+          <button class="tab active" id="tabFiles" data-i18n="files_title">FILES</button>
+          <button class="tab" id="tabSessions" data-i18n="sessions_title">SESSIONS</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="iconbtn ghost" id="drawerRefresh" data-i18n-title="t_refresh" title="刷新">↻</button>
+        <button class="iconbtn ghost" id="drawerClose" data-i18n-title="t_close" title="关闭">✕</button>
       </div>
-      <div class="crumbs" id="crumbs"></div>
-      <div class="filelist" id="filelist"></div>
+      <div class="panel" id="filesPanel">
+        <div class="crumbs" id="crumbs"></div>
+        <div class="filelist" id="filelist"></div>
+      </div>
+      <div class="panel hidden" id="sessionsPanel">
+        <div class="sess-cwd" id="sessCwd"></div>
+        <div class="filelist" id="sesslist"></div>
+      </div>
     </aside>
   </div>
 
   <!-- permission overlay -->
   <div class="overlay" id="permOverlay">
     <div class="modal perm">
-      <div class="ribbon"><span class="icn">⚠</span><span class="h">Authorization Required</span></div>
+      <div class="ribbon"><span class="icn">⚠</span><span class="h" data-i18n="perm_h">Authorization Required</span></div>
       <div class="pbody">
-        <div class="toolline">claude 请求执行工具 <b id="permTool">—</b></div>
+        <div class="toolline" id="permToolLine"></div>
         <div class="desc" id="permDesc"></div>
         <pre id="permInput">{}</pre>
       </div>
       <div class="actions">
-        <button class="deny" id="permDeny">DENY</button>
-        <button class="allow" id="permAllow">ALLOW ONCE</button>
+        <button class="deny" id="permDeny" data-i18n="btn_deny">DENY</button>
+        <button class="allow" id="permAllow" data-i18n="btn_allow">ALLOW ONCE</button>
       </div>
     </div>
   </div>
@@ -381,11 +266,23 @@
     <div class="modal viewer">
       <div class="vhead">
         <span class="vn" id="viewerName">file</span>
-        <a id="viewerDownload" class="iconbtn ghost" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center" title="下载">⬇</a>
-        <button class="iconbtn ghost" id="viewerClose" title="关闭">✕</button>
+        <a id="viewerDownload" class="iconbtn ghost" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center" title="download">⬇</a>
+        <button class="iconbtn ghost" id="viewerClose" title="close">✕</button>
       </div>
       <div class="vbody"><pre id="viewerBody"></pre></div>
-      <div class="trunc" id="viewerTrunc" style="display:none">⚠ 文件超过 1MB，仅显示前 1MB。完整内容请下载。</div>
+      <div class="trunc" id="viewerTrunc" data-i18n="viewer_trunc" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- session transcript overlay -->
+  <div class="overlay" id="sessOverlay">
+    <div class="modal viewer">
+      <div class="vhead">
+        <span class="vn" id="sessTitle">session</span>
+        <button class="resume" id="sessResume" data-i18n="btn_resume">RESUME</button>
+        <button class="iconbtn ghost" id="sessVClose" title="close">✕</button>
+      </div>
+      <div class="vbody"><div class="transcript" id="sessBody"></div></div>
     </div>
   </div>
 
@@ -395,178 +292,194 @@
 "use strict";
 (() => {
   const $ = (s) => document.querySelector(s);
-  const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
+  const el = (t, c) => { const e = document.createElement(t); if (c) e.className = c; return e; };
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  const state = { ws: null, sock: null, status: "off", ready: false, sessionId: "", cwd: "", pendingPerm: null, autoscroll: true };
+  // ── i18n ────────────────────────────────────────────────
+  const I18N = {
+    lbl_agent: { en: "agent", zh: "地址" },
+    lbl_token: { en: "token", zh: "令牌" },
+    btn_send: { en: "SEND", zh: "发送" },
+    btn_connect: { en: "CONNECT", zh: "连接" },
+    btn_disconnect: { en: "DISCONNECT", zh: "断开" },
+    btn_deny: { en: "DENY", zh: "拒绝" },
+    btn_allow: { en: "ALLOW ONCE", zh: "本次允许" },
+    btn_resume: { en: "RESUME", zh: "续接" },
+    perm_h: { en: "Authorization Required", zh: "需要授权" },
+    perm_pre: { en: "claude wants to use tool", zh: "claude 请求执行工具" },
+    perm_desc_default: { en: "This action needs your explicit approval before it runs.", zh: "该操作需要你的明确授权才会执行。" },
+    files_title: { en: "FILES", zh: "文件" },
+    sessions_title: { en: "SESSIONS", zh: "会话" },
+    viewer_trunc: { en: "⚠ File exceeds 1 MB; showing the first 1 MB only. Download for the full content.", zh: "⚠ 文件超过 1MB，仅显示前 1MB。完整内容请下载。" },
+    t_refresh: { en: "Refresh", zh: "刷新" },
+    t_close: { en: "Close", zh: "关闭" },
+    t_panel: { en: "Files / Sessions", zh: "文件 / 会话" },
+    status_offline: { en: "offline", zh: "未连接" },
+    status_connecting: { en: "connecting", zh: "连接中" },
+    status_online: { en: "online", zh: "在线" },
+    status_resumed: { en: "resumed", zh: "已续接" },
+    cwd_disconnected: { en: "disconnected", zh: "未连接" },
+    cwd_ready: { en: "ready", zh: "已就绪" },
+    empty_html: { en: "REMOTE CLAUDE CODE · OVER WEBSOCKET<br/>Enter the <kbd>agent</kbd> URL and <kbd>token</kbd>, hit <kbd>CONNECT</kbd> to reach the target host<br/>Every dangerous action asks for your approval right here", zh: "远程 CLAUDE CODE · 基于 WEBSOCKET<br/>填入 <kbd>地址</kbd> 与 <kbd>令牌</kbd>，按 <kbd>连接</kbd> 接入目标机<br/>危险操作会在此弹窗请求授权 — 你说了才算" },
+    hotkeys_html: { en: "<b>Enter</b> send · <b>Shift+Enter</b> newline · <b>⌘/Ctrl+K</b> new session", zh: "<b>Enter</b> 发送 · <b>Shift+Enter</b> 换行 · <b>⌘/Ctrl+K</b> 新会话" },
+    tag_you: { en: "you", zh: "你" },
+    tag_claude: { en: "claude", zh: "claude" },
+    tag_output: { en: "output", zh: "输出" },
+    result_complete: { en: "turn complete", zh: "本轮完成" },
+    result_failed: { en: "turn failed", zh: "本轮失败" },
+    toolresult_empty: { en: "(empty)", zh: "(空)" },
+    toast_need_token: { en: "Enter AGENT_TOKEN first", zh: "请先填入 AGENT_TOKEN" },
+    toast_conn_fail: { en: "Connection failed: ", zh: "连接失败：" },
+    toast_ws_err: { en: "WebSocket error (check URL / token / network)", zh: "WebSocket 错误（检查地址 / token / 网络）" },
+    sys_session_ended: { en: "Session ended: ", zh: "会话已结束：" },
+    sys_new_session: { en: "New session started", zh: "已开启新会话" },
+    sys_error: { en: "Error: ", zh: "错误：" },
+    sys_resume_invalid: { en: "Previous session expired, reconnecting fresh…", zh: "历史会话已失效，正在以新会话重连…" },
+    sys_claude_exit: { en: "claude exited: ", zh: "claude 退出：" },
+    sys_authorized: { en: "authorized", zh: "已授权" },
+    sys_denied: { en: "denied", zh: "已拒绝" },
+    sys_resuming: { en: "Resuming session…", zh: "正在续接会话…" },
+    file_loading: { en: "Loading…", zh: "加载中…" },
+    file_need_token: { en: "Enter token first", zh: "请先填入 token" },
+    file_empty: { en: "(empty directory)", zh: "（空目录）" },
+    file_read_fail: { en: "Read failed: ", zh: "读取失败：" },
+    file_open_fail: { en: "Open failed: ", zh: "打开失败：" },
+    sess_none: { en: "No history sessions for this directory", zh: "该目录暂无历史会话" },
+    sess_msgs: { en: "msgs", zh: "条" },
+    sess_current: { en: "current", zh: "当前" },
+    cmd_clear: { en: "Clear conversation context", zh: "清空对话上下文" },
+    cmd_compact: { en: "Compact (summarize) the conversation", zh: "压缩（总结）对话" },
+    cmd_context: { en: "Show context-window usage", zh: "查看上下文用量" },
+    cmd_usage: { en: "Show plan / usage", zh: "查看用量 / 套餐" },
+    cmd_cost: { en: "Show this session's cost", zh: "查看本会话花费" },
+    cmd_init: { en: "Analyze the project and write CLAUDE.md", zh: "分析项目并生成 CLAUDE.md" },
+  };
+  let lang = localStorage.getItem("agent.lang") || ((navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en");
+  const t = (k) => (I18N[k] && I18N[k][lang]) || k;
 
-  // ── persisted connection settings ───────────────────────
+  const COMMANDS = [
+    { cmd: "/clear", key: "cmd_clear" }, { cmd: "/compact", key: "cmd_compact" },
+    { cmd: "/context", key: "cmd_context" }, { cmd: "/usage", key: "cmd_usage" },
+    { cmd: "/cost", key: "cmd_cost" }, { cmd: "/init", key: "cmd_init" },
+  ];
+
+  const state = { ws: null, sock: null, statusKind: "off", statusKey: "status_offline", sessionId: "", cwd: "", cwdMode: "off", pendingPerm: null, autoscroll: true };
+
+  // ── connection settings ─────────────────────────────────
   const baseInput = $("#base"), tokenInput = $("#token");
   baseInput.value = localStorage.getItem("agent.base") || `${location.protocol}//${location.host}`;
   tokenInput.value = localStorage.getItem("agent.token") || "";
   baseInput.addEventListener("change", () => localStorage.setItem("agent.base", baseInput.value.trim()));
   tokenInput.addEventListener("change", () => localStorage.setItem("agent.token", tokenInput.value.trim()));
-
   const httpBase = () => (baseInput.value.trim() || `${location.protocol}//${location.host}`).replace(/\/+$/, "");
-  const fsURL = (path, p = "path") => `${httpBase()}/agent/fs/${path}?token=${encodeURIComponent(tokenInput.value.trim())}`;
+  const apiURL = (group, op) => `${httpBase()}/agent/${group}/${op}?token=${encodeURIComponent(tokenInput.value.trim())}`;
 
-  // ── status / toast ──────────────────────────────────────
-  function setStatus(kind, text) {
-    state.status = kind;
-    $("#status").className = "status " + kind;
-    $("#statusText").textContent = text;
+  // ── status / cwd / toast ────────────────────────────────
+  function setStatus(kind, key) {
+    state.statusKind = kind; state.statusKey = key;
+    $("#status").className = "status " + kind; $("#statusText").textContent = t(key);
+  }
+  function renderCwd() {
+    const c = $("#cwd");
+    if (state.cwdMode === "ready" && state.cwd) c.innerHTML = `cwd <b>${esc(state.cwd)}</b>`;
+    else if (state.cwdMode === "ready") c.textContent = t("cwd_ready");
+    else c.textContent = t("cwd_disconnected");
   }
   let toastT;
-  function toast(msg) {
-    const t = $("#toast"); t.textContent = msg; t.classList.add("show");
-    clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 4200);
-  }
+  function toast(msg) { const x = $("#toast"); x.textContent = msg; x.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => x.classList.remove("show"), 4200); }
 
   // ── stream rendering ────────────────────────────────────
   const stream = $("#stream");
-  stream.addEventListener("scroll", () => {
-    state.autoscroll = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 80;
-  });
+  stream.addEventListener("scroll", () => { state.autoscroll = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 80; });
   function killEmpty() { const e = $("#empty"); if (e) e.remove(); }
-  function append(node) {
-    killEmpty(); stream.appendChild(node);
-    if (state.autoscroll) stream.scrollTop = stream.scrollHeight;
-  }
+  function append(node) { killEmpty(); stream.appendChild(node); if (state.autoscroll) stream.scrollTop = stream.scrollHeight; }
 
-  // minimal, safe markdown: fenced code + inline code, everything else escaped
   function renderProse(text) {
-    const parts = String(text).split(/```/);
-    let html = "";
+    const parts = String(text).split(/```/); let html = "";
     parts.forEach((seg, i) => {
-      if (i % 2 === 1) {
-        const nl = seg.indexOf("\n");
-        const code = nl >= 0 ? seg.slice(nl + 1) : seg;
-        html += `<pre><code>${esc(code.replace(/\n$/, ""))}</code></pre>`;
-      } else {
-        html += esc(seg).replace(/`([^`\n]+)`/g, "<code>$1</code>");
-      }
+      if (i % 2 === 1) { const nl = seg.indexOf("\n"); const code = nl >= 0 ? seg.slice(nl + 1) : seg; html += `<pre><code>${esc(code.replace(/\n$/, ""))}</code></pre>`; }
+      else html += esc(seg).replace(/`([^`\n]+)`/g, "<code>$1</code>");
     });
     return html;
   }
-
-  function addUser(text) {
-    const m = el("div", "msg right");
-    m.innerHTML = `<div class="tag">you</div>`;
-    const b = el("div", "bubble user"); b.textContent = text; m.appendChild(b);
-    append(m);
+  function toolDetails(name, input) {
+    const d = el("details", "tool"); d.open = false;
+    let pretty; try { pretty = JSON.stringify(input ?? {}, null, 2); } catch { pretty = String(input); }
+    d.innerHTML = `<summary><span class="glyph">⚙</span><span class="tname">${esc(name)}</span><span class="hint"><span class="chev">›</span> input</span></summary><pre class="payload">${esc(pretty)}</pre>`;
+    return d;
   }
+  function resultBox(content, isErr) { const b = el("div", "result" + (isErr ? " err" : "")); b.textContent = content || t("toolresult_empty"); return b; }
 
+  function addUser(text) { const m = el("div", "msg right"); m.innerHTML = `<div class="tag" data-i18n="tag_you">${t("tag_you")}</div>`; const b = el("div", "bubble user"); b.textContent = text; m.appendChild(b); append(m); }
   function addAssistant(blocks) {
-    const m = el("div", "msg");
-    m.innerHTML = `<div class="tag">claude</div>`;
+    const m = el("div", "msg"); m.innerHTML = `<div class="tag" data-i18n="tag_claude">${t("tag_claude")}</div>`;
     blocks.forEach((blk) => {
-      if (blk.kind === "text") {
-        const p = el("div", "prose"); p.innerHTML = renderProse(blk.text); m.appendChild(p);
-      } else if (blk.kind === "tool_use") {
-        const d = el("details", "tool"); d.open = false;
-        const pretty = (() => { try { return JSON.stringify(blk.input ?? {}, null, 2); } catch { return String(blk.input); } })();
-        d.innerHTML = `<summary><span class="glyph">⚙</span><span class="tname">${esc(blk.name)}</span>
-          <span class="hint"><span class="chev">›</span> input</span></summary><pre class="payload">${esc(pretty)}</pre>`;
-        m.appendChild(d);
-      }
+      if (blk.kind === "text") { const p = el("div", "prose"); p.innerHTML = renderProse(blk.text); m.appendChild(p); }
+      else if (blk.kind === "tool_use") m.appendChild(toolDetails(blk.name, blk.input));
     });
     if (m.children.length > 1) append(m);
   }
-
-  function addToolResults(results) {
-    const m = el("div", "msg");
-    m.innerHTML = `<div class="tag">output</div>`;
-    results.forEach((r) => {
-      const box = el("div", "result" + (r.is_error ? " err" : ""));
-      box.textContent = r.content || "(空)";
-      m.appendChild(box);
-    });
-    append(m);
-  }
-
+  function addToolResults(results) { const m = el("div", "msg"); m.innerHTML = `<div class="tag" data-i18n="tag_output">${t("tag_output")}</div>`; results.forEach((r) => m.appendChild(resultBox(r.content, r.is_error))); append(m); }
   function addResult(ev) {
     const line = el("div", "endline" + (ev.is_error ? " err" : ""));
     const dur = ev.duration_ms != null ? `${(ev.duration_ms / 1000).toFixed(1)}s` : "";
     const cost = ev.total_cost_usd != null ? `$${Number(ev.total_cost_usd).toFixed(4)}` : "";
-    const bits = [ev.is_error ? "turn failed" : "turn complete", dur, cost].filter(Boolean);
-    line.innerHTML = `<b>◆</b>&nbsp;${esc(bits.join("  ·  "))}`;
-    append(line);
+    const bits = [t(ev.is_error ? "result_failed" : "result_complete"), dur, cost].filter(Boolean);
+    line.innerHTML = `<b>◆</b>&nbsp;${esc(bits.join("  ·  "))}`; append(line);
   }
-
-  function addSystem(text, isErr) {
-    const n = el("div", "sysnote" + (isErr ? " err" : "")); n.textContent = text; append(n);
-  }
+  function addSystem(text, isErr) { const n = el("div", "sysnote" + (isErr ? " err" : "")); n.textContent = text; append(n); }
 
   // ── websocket lifecycle ─────────────────────────────────
   function wsURL() {
-    const b = httpBase();
-    const wsProto = b.startsWith("https") ? "wss" : "ws";
-    const host = b.replace(/^https?:\/\//, "");
+    const b = httpBase(); const wsProto = b.startsWith("https") ? "wss" : "ws"; const host = b.replace(/^https?:\/\//, "");
     let u = `${wsProto}://${host}/agent/chat?token=${encodeURIComponent(tokenInput.value.trim())}`;
     if (state.sessionId) u += `&session_id=${encodeURIComponent(state.sessionId)}`;
     return u;
   }
-
+  function setComposerEnabled(on) {
+    $("#input").disabled = !on; $("#sendBtn").disabled = !on;
+    document.querySelectorAll("#cmdbar .cmd").forEach((b) => (b.disabled = !on));
+  }
   function connect() {
-    if (!tokenInput.value.trim()) { toast("请先填入 AGENT_TOKEN"); tokenInput.focus(); return; }
+    if (!tokenInput.value.trim()) { toast(t("toast_need_token")); tokenInput.focus(); return; }
     disconnect(true);
-    setStatus("busy", "connecting");
-    let sock;
-    try { sock = new WebSocket(wsURL()); } catch (e) { setStatus("off", "offline"); toast("连接失败: " + e.message); return; }
+    setStatus("busy", "status_connecting");
+    let sock; try { sock = new WebSocket(wsURL()); } catch (e) { setStatus("off", "status_offline"); toast(t("toast_conn_fail") + e.message); return; }
     state.sock = sock; state.ws = sock;
-
-    sock.onopen = () => {
-      if (state.ws !== sock) return;
-      setStatus("on", state.sessionId ? "resumed" : "online");
-      $("#input").disabled = false; $("#sendBtn").disabled = false; $("#input").focus();
-    };
+    sock.onopen = () => { if (state.ws !== sock) return; setStatus("on", state.sessionId ? "status_resumed" : "status_online"); setComposerEnabled(true); $("#input").focus(); };
     sock.onmessage = (e) => { if (state.ws === sock) handleEvent(e.data); };
-    sock.onerror = () => { if (state.ws === sock) toast("WebSocket 错误（检查地址 / token / 网络）"); };
+    sock.onerror = () => { if (state.ws === sock) toast(t("toast_ws_err")); };
     sock.onclose = (ev) => {
       if (state.ws !== sock) return;
-      state.ws = null; state.sock = null;
-      setStatus("off", "offline");
-      $("#input").disabled = true; $("#sendBtn").disabled = true;
-      closePermission();
-      if (ev.reason) addSystem("会话已结束：" + ev.reason, false);
+      state.ws = null; state.sock = null; state.cwdMode = "off"; renderCwd();
+      setStatus("off", "status_offline"); setComposerEnabled(false); closePermission();
+      if (ev.reason) addSystem(t("sys_session_ended") + ev.reason, false);
     };
   }
-
   function disconnect(silent) {
-    const old = state.sock;
-    state.ws = null; state.sock = null;
+    const old = state.sock; state.ws = null; state.sock = null;
     if (old) { try { old.send(JSON.stringify({ type: "close" })); } catch {} try { old.close(); } catch {} }
-    if (!silent) { setStatus("off", "offline"); $("#input").disabled = true; $("#sendBtn").disabled = true; }
+    if (!silent) { setStatus("off", "status_offline"); setComposerEnabled(false); state.cwdMode = "off"; renderCwd(); }
   }
-
   function newSession() {
-    state.sessionId = ""; state.cwd = ""; $("#cwd").textContent = "未连接";
-    stream.innerHTML = ""; addSystem("已开启新会话", false);
+    state.sessionId = ""; state.cwd = ""; state.cwdMode = "off"; renderCwd();
+    stream.innerHTML = ""; addSystem(t("sys_new_session"), false);
     if (state.ws) connect();
   }
-
   function handleEvent(raw) {
     let ev; try { ev = JSON.parse(raw); } catch { return; }
     switch (ev.type) {
       case "ready":
-        state.ready = true;
         if (ev.session_id) state.sessionId = ev.session_id;
-        state.cwd = ev.cwd || "";
-        $("#cwd").innerHTML = state.cwd ? `cwd <b>${esc(state.cwd)}</b>` : "已就绪";
-        setStatus("on", "online");
-        break;
+        state.cwd = ev.cwd || ""; state.cwdMode = "ready"; renderCwd(); setStatus("on", "status_online"); break;
       case "assistant": addAssistant(ev.blocks || []); break;
       case "tool_result": addToolResults(ev.results || []); break;
       case "permission_request": showPermission(ev); break;
       case "result": addResult(ev); break;
-      case "error": addSystem("错误：" + (ev.msg || "未知"), true); break;
+      case "error": addSystem(t("sys_error") + (ev.msg || "?"), true); break;
       case "closed":
-        if (ev.stderr && /resume|session/i.test(ev.stderr) && state.sessionId) {
-          // resume 的会话失效 → 自动降级为新会话重连
-          state.sessionId = ""; addSystem("历史会话已失效，正在以新会话重连…", false); connect();
-        } else if (ev.stderr) {
-          addSystem("claude 退出：" + ev.stderr.slice(0, 300), true);
-        }
+        if (ev.stderr && /resume|session/i.test(ev.stderr) && state.sessionId) { state.sessionId = ""; addSystem(t("sys_resume_invalid"), false); connect(); }
+        else if (ev.stderr) addSystem(t("sys_claude_exit") + ev.stderr.slice(0, 300), true);
         break;
     }
   }
@@ -575,120 +488,181 @@
   const input = $("#input");
   function autosize() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 180) + "px"; }
   input.addEventListener("input", autosize);
-  function send() {
-    const text = input.value.trim();
+  function sendText(text) {
+    text = (text || "").trim();
     if (!text || !state.ws || state.ws.readyState !== 1) return;
-    addUser(text);
-    state.ws.send(JSON.stringify({ type: "user_message", text }));
-    input.value = ""; autosize(); input.focus();
+    addUser(text); state.ws.send(JSON.stringify({ type: "user_message", text }));
   }
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-  });
+  function send() { if (input.disabled) return; const v = input.value; input.value = ""; autosize(); sendText(v); input.focus(); }
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
   $("#sendBtn").addEventListener("click", send);
-
   $("#connectBtn").addEventListener("click", () => { state.ws ? disconnect() : connect(); });
-  function syncConnectBtn() { $("#connectBtn").textContent = state.ws ? "DISCONNECT" : "CONNECT"; }
+  function syncConnectBtn() { $("#connectBtn").textContent = t(state.ws ? "btn_disconnect" : "btn_connect"); }
   setInterval(syncConnectBtn, 300);
-
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); newSession(); }
-    if (e.key === "Escape") { if (state.pendingPerm) respondPermission(false); else { closeViewer(); } }
+    if (e.key === "Escape") { if (state.pendingPerm) respondPermission(false); else { closeViewer(); closeSess(); } }
   });
 
+  // ── command bar ─────────────────────────────────────────
+  function buildCmdBar() {
+    const bar = $("#cmdbar"); bar.innerHTML = "";
+    COMMANDS.forEach((c) => {
+      const b = el("button", "cmd"); b.type = "button"; b.textContent = c.cmd; b.title = t(c.key);
+      b.disabled = !(state.ws && state.ws.readyState === 1);
+      b.addEventListener("click", () => sendText(c.cmd));
+      bar.appendChild(b);
+    });
+  }
+
   // ── permission modal ────────────────────────────────────
-  function showPermission(ev) {
-    state.pendingPerm = ev;
-    $("#permTool").textContent = ev.tool_name || "?";
-    $("#permDesc").textContent = ev.description || ev.title || "该操作需要你的明确授权才会执行。";
+  function renderPermission(ev) {
+    $("#permToolLine").innerHTML = `${esc(t("perm_pre"))} <b>${esc(ev.tool_name || "?")}</b>`;
+    $("#permDesc").textContent = ev.description || ev.title || t("perm_desc_default");
     let pretty; try { pretty = JSON.stringify(ev.tool_input ?? {}, null, 2); } catch { pretty = String(ev.tool_input); }
     $("#permInput").textContent = pretty;
-    $("#permOverlay").classList.add("show");
   }
+  function showPermission(ev) { state.pendingPerm = ev; renderPermission(ev); $("#permOverlay").classList.add("show"); }
   function closePermission() { state.pendingPerm = null; $("#permOverlay").classList.remove("show"); }
   function respondPermission(allow) {
     const ev = state.pendingPerm; if (!ev) return;
-    if (state.ws && state.ws.readyState === 1) {
-      state.ws.send(JSON.stringify({ type: "permission_response", request_id: ev.request_id, allow, tool_input: ev.tool_input }));
-    }
-    addSystem(`${allow ? "已授权" : "已拒绝"} · ${ev.tool_name}`, !allow);
-    closePermission();
+    if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ type: "permission_response", request_id: ev.request_id, allow, tool_input: ev.tool_input }));
+    addSystem(`${t(allow ? "sys_authorized" : "sys_denied")} · ${ev.tool_name}`, !allow); closePermission();
   }
   $("#permAllow").addEventListener("click", () => respondPermission(true));
   $("#permDeny").addEventListener("click", () => respondPermission(false));
 
-  // ── files drawer ────────────────────────────────────────
+  // ── drawer: tabs ────────────────────────────────────────
   const drawer = $("#drawer");
-  let fsPath = "";
-  $("#filesBtn").addEventListener("click", () => { drawer.classList.toggle("open"); if (drawer.classList.contains("open")) loadDir(fsPath); });
-  $("#fsClose").addEventListener("click", () => drawer.classList.remove("open"));
-  $("#fsRefresh").addEventListener("click", () => loadDir(fsPath));
-
-  async function fsGet(path) {
-    const r = await fetch(path);
-    const j = await r.json();
-    if (j.code !== 0) throw new Error(j.msg || "请求失败");
-    return j.data;
+  let activeTab = "files";
+  function showTab(tab) {
+    activeTab = tab;
+    $("#tabFiles").classList.toggle("active", tab === "files");
+    $("#tabSessions").classList.toggle("active", tab === "sessions");
+    $("#filesPanel").classList.toggle("hidden", tab !== "files");
+    $("#sessionsPanel").classList.toggle("hidden", tab !== "sessions");
+    if (tab === "files") loadDir(fsPath); else loadSessions();
   }
+  $("#tabFiles").addEventListener("click", () => showTab("files"));
+  $("#tabSessions").addEventListener("click", () => showTab("sessions"));
+  $("#filesBtn").addEventListener("click", () => { drawer.classList.toggle("open"); if (drawer.classList.contains("open")) showTab(activeTab); });
+  $("#drawerClose").addEventListener("click", () => drawer.classList.remove("open"));
+  $("#drawerRefresh").addEventListener("click", () => (activeTab === "files" ? loadDir(fsPath) : loadSessions()));
 
+  async function apiGet(url) { const r = await fetch(url); const j = await r.json(); if (j.code !== 0) throw new Error(j.msg || "error"); return j.data; }
+
+  // ── files panel ─────────────────────────────────────────
+  let fsPath = "";
   function renderCrumbs() {
     const c = $("#crumbs"); c.innerHTML = "";
     const root = el("a"); root.textContent = "~"; root.onclick = () => loadDir(""); c.appendChild(root);
     let acc = "";
     fsPath.split("/").filter(Boolean).forEach((seg) => {
-      acc += (acc ? "/" : "") + seg;
-      const sep = el("span", "sep"); sep.textContent = "/"; c.appendChild(sep);
+      acc += (acc ? "/" : "") + seg; const sep = el("span", "sep"); sep.textContent = "/"; c.appendChild(sep);
       const a = el("a"); a.textContent = seg; const target = acc; a.onclick = () => loadDir(target); c.appendChild(a);
     });
   }
-
-  function fmtSize(n) {
-    if (n == null) return ""; if (n < 1024) return n + "B";
-    if (n < 1048576) return (n / 1024).toFixed(0) + "K"; return (n / 1048576).toFixed(1) + "M";
-  }
-
+  const fmtSize = (n) => n == null ? "" : n < 1024 ? n + "B" : n < 1048576 ? (n / 1024).toFixed(0) + "K" : (n / 1048576).toFixed(1) + "M";
   async function loadDir(path) {
     fsPath = path; renderCrumbs();
-    const list = $("#filelist"); list.innerHTML = `<div class="filemsg">加载中…</div>`;
-    if (!tokenInput.value.trim()) { list.innerHTML = `<div class="filemsg">请先填入 token</div>`; return; }
+    const list = $("#filelist"); list.innerHTML = `<div class="filemsg">${t("file_loading")}</div>`;
+    if (!tokenInput.value.trim()) { list.innerHTML = `<div class="filemsg">${t("file_need_token")}</div>`; return; }
     try {
-      const data = await fsGet(fsURL("list") + "&path=" + encodeURIComponent(path));
-      const entries = data.entries || [];
-      list.innerHTML = "";
-      if (!entries.length) { list.innerHTML = `<div class="filemsg">（空目录）</div>`; return; }
+      const data = await apiGet(apiURL("fs", "list") + "&path=" + encodeURIComponent(path));
+      const entries = data.entries || []; list.innerHTML = "";
+      if (!entries.length) { list.innerHTML = `<div class="filemsg">${t("file_empty")}</div>`; return; }
       entries.forEach((e) => {
         const row = el("div", "frow " + (e.is_dir ? "dir" : "file"));
         const child = (path ? path + "/" : "") + e.name;
-        row.innerHTML = `<span class="ic">${e.is_dir ? "▸" : "·"}</span><span class="nm">${esc(e.name)}</span>` +
-          (e.is_dir ? "" : `<span class="sz">${fmtSize(e.size)}</span><a class="dl" title="下载">⬇</a>`);
+        row.innerHTML = `<span class="ic">${e.is_dir ? "▸" : "·"}</span><span class="nm">${esc(e.name)}</span>` + (e.is_dir ? "" : `<span class="sz">${fmtSize(e.size)}</span><a class="dl" title="download">⬇</a>`);
         if (e.is_dir) row.onclick = () => loadDir(child);
-        else {
-          row.querySelector(".nm").onclick = () => viewFile(child, e.name);
-          row.querySelector(".dl").onclick = (ev) => { ev.stopPropagation(); window.open(fsURL("download") + "&path=" + encodeURIComponent(child), "_blank"); };
-        }
+        else { row.querySelector(".nm").onclick = () => viewFile(child, e.name); row.querySelector(".dl").onclick = (ev) => { ev.stopPropagation(); window.open(apiURL("fs", "download") + "&path=" + encodeURIComponent(child), "_blank"); }; }
         list.appendChild(row);
       });
-    } catch (err) { list.innerHTML = `<div class="filemsg">读取失败：${esc(err.message)}</div>`; }
+    } catch (err) { list.innerHTML = `<div class="filemsg">${t("file_read_fail")}${esc(err.message)}</div>`; }
   }
-
   async function viewFile(path, name) {
     try {
-      const data = await fsGet(fsURL("read") + "&path=" + encodeURIComponent(path));
-      $("#viewerName").textContent = name;
-      $("#viewerBody").textContent = data.content || "";
+      const data = await apiGet(apiURL("fs", "read") + "&path=" + encodeURIComponent(path));
+      $("#viewerName").textContent = name; $("#viewerBody").textContent = data.content || "";
       $("#viewerTrunc").style.display = data.truncated ? "block" : "none";
-      $("#viewerDownload").href = fsURL("download") + "&path=" + encodeURIComponent(path);
+      $("#viewerDownload").href = apiURL("fs", "download") + "&path=" + encodeURIComponent(path);
       $("#viewerOverlay").classList.add("show");
-    } catch (err) { toast("打开失败：" + err.message); }
+    } catch (err) { toast(t("file_open_fail") + err.message); }
   }
   function closeViewer() { $("#viewerOverlay").classList.remove("show"); }
   $("#viewerClose").addEventListener("click", closeViewer);
   $("#viewerOverlay").addEventListener("click", (e) => { if (e.target.id === "viewerOverlay") closeViewer(); });
 
-  // graceful close on unload
+  // ── sessions panel ──────────────────────────────────────
+  async function loadSessions() {
+    const list = $("#sesslist"); list.innerHTML = `<div class="filemsg">${t("file_loading")}</div>`;
+    $("#sessCwd").innerHTML = "";
+    if (!tokenInput.value.trim()) { list.innerHTML = `<div class="filemsg">${t("file_need_token")}</div>`; return; }
+    try {
+      const data = await apiGet(apiURL("sessions", "list"));
+      $("#sessCwd").innerHTML = data.cwd ? `cwd <b>${esc(data.cwd)}</b>` : "";
+      const sess = data.sessions || []; list.innerHTML = "";
+      if (!sess.length) { list.innerHTML = `<div class="filemsg">${t("sess_none")}</div>`; return; }
+      sess.forEach((s) => {
+        const row = el("div", "srow");
+        const cur = s.id === state.sessionId ? `<span class="cur">${t("sess_current")}</span>` : "";
+        row.innerHTML = `<div class="st">${esc(s.title || s.id.slice(0, 8))}</div><div class="sm"><span>${esc(s.mtime)}</span><span>${s.messages} ${t("sess_msgs")}</span>${cur}</div>`;
+        row.onclick = () => openSession(s);
+        list.appendChild(row);
+      });
+    } catch (err) { list.innerHTML = `<div class="filemsg">${t("file_read_fail")}${esc(err.message)}</div>`; }
+  }
+  function renderTranscript(items) {
+    const box = $("#sessBody"); box.innerHTML = "";
+    (items || []).forEach((it) => {
+      if (it.role === "user") {
+        it.blocks.forEach((b) => {
+          if (b.kind === "text") { const m = el("div", "msg right"); m.innerHTML = `<div class="tag">${t("tag_you")}</div>`; const bub = el("div", "bubble user"); bub.textContent = b.text; m.appendChild(bub); box.appendChild(m); }
+          else if (b.kind === "tool_result") { const m = el("div", "msg"); m.innerHTML = `<div class="tag">${t("tag_output")}</div>`; m.appendChild(resultBox(b.content, b.is_error)); box.appendChild(m); }
+        });
+      } else {
+        const m = el("div", "msg"); m.innerHTML = `<div class="tag">${t("tag_claude")}</div>`;
+        it.blocks.forEach((b) => { if (b.kind === "text") { const p = el("div", "prose"); p.innerHTML = renderProse(b.text); m.appendChild(p); } else if (b.kind === "tool_use") m.appendChild(toolDetails(b.name, b.input)); });
+        if (m.children.length > 1) box.appendChild(m);
+      }
+    });
+  }
+  let sessViewId = "";
+  async function openSession(s) {
+    sessViewId = s.id; $("#sessTitle").textContent = s.title || s.id;
+    $("#sessBody").innerHTML = `<div class="filemsg">${t("file_loading")}</div>`;
+    $("#sessOverlay").classList.add("show");
+    try { const data = await apiGet(apiURL("sessions", "read") + "&id=" + encodeURIComponent(s.id)); renderTranscript(data.items); }
+    catch (err) { $("#sessBody").innerHTML = `<div class="filemsg">${t("file_read_fail")}${esc(err.message)}</div>`; }
+  }
+  function closeSess() { $("#sessOverlay").classList.remove("show"); }
+  $("#sessVClose").addEventListener("click", closeSess);
+  $("#sessOverlay").addEventListener("click", (e) => { if (e.target.id === "sessOverlay") closeSess(); });
+  $("#sessResume").addEventListener("click", () => {
+    if (!sessViewId) return;
+    closeSess(); drawer.classList.remove("open");
+    state.sessionId = sessViewId; stream.innerHTML = ""; addSystem(t("sys_resuming"), false); connect();
+  });
+
+  // ── language toggle ─────────────────────────────────────
+  function applyLang() {
+    document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+    document.querySelectorAll("[data-i18n]").forEach((e) => (e.textContent = t(e.dataset.i18n)));
+    document.querySelectorAll("[data-i18n-html]").forEach((e) => (e.innerHTML = t(e.dataset.i18nHtml)));
+    document.querySelectorAll("[data-i18n-title]").forEach((e) => (e.title = t(e.dataset.i18nTitle)));
+    $("#langBtn").textContent = lang === "zh" ? "EN" : "中";
+    $("#langBtn").title = lang === "zh" ? "Switch to English" : "切换中文";
+    syncConnectBtn(); setStatus(state.statusKind, state.statusKey); renderCwd(); buildCmdBar();
+    if (state.pendingPerm) renderPermission(state.pendingPerm);
+    if (drawer.classList.contains("open") && activeTab === "sessions") { /* labels only; list refresh optional */ }
+  }
+  $("#langBtn").addEventListener("click", () => { lang = lang === "zh" ? "en" : "zh"; localStorage.setItem("agent.lang", lang); applyLang(); });
+
   window.addEventListener("beforeunload", () => { if (state.sock) { try { state.sock.send(JSON.stringify({ type: "close" })); state.sock.close(); } catch {} } });
 
-  syncConnectBtn();
+  // ── init ────────────────────────────────────────────────
+  buildCmdBar(); applyLang(); renderCwd();
 })();
 </script>
 </body>

@@ -1,5 +1,7 @@
 # claude-agent
 
+**English** · [简体中文](./README.zh-CN.md)
+
 > A tiny, single-binary agent that lets you drive [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on a **remote machine** from your browser — over WebSocket, with **human-in-the-loop approval** for every dangerous action.
 
 `claude-agent` runs on a target server, spawns the locally-installed `claude` CLI as a
@@ -14,6 +16,9 @@ embedded in the binary, so you can point a browser at it and start working immed
 
 No API keys live in the agent. Credentials, model selection, and any third-party gateway
 config are entirely owned by the `claude` CLI on the target machine — the agent just drives it.
+
+![claude-agent web console](./docs/en-chat.png)
+<p align="center"><em>The built-in console — chat, native command bar, tool cards, and human-in-the-loop approval.</em></p>
 
 ---
 
@@ -156,11 +161,24 @@ Served at `/` (unless `AGENT_UI=off`). It's a single self-contained HTML file em
 the binary — no build step, no external fonts or CDNs, works offline.
 
 - **Chat** with the remote Claude: streamed assistant text, tool-use cards, and tool output.
+- **Native command bar** — one click sends `/clear`, `/compact`, `/context`, `/usage`,
+  `/cost`, or `/init` straight to Claude (these run over the same `stream-json` channel).
 - **Authorization overlay** for every `permission_request` — see the exact tool + input
   before allowing/denying.
 - **Files drawer** — browse the working directory, view text files, download, all jailed.
+- **History sessions** — see the current directory's past Claude sessions, read any
+  transcript, and **resume** one to continue with full context (`--resume`).
 - **Session continuity** — the console remembers the `session_id` and reconnects with
   `--resume`; `⌘/Ctrl+K` starts a fresh session.
+- **Bilingual UI** — one-click English ⇄ 中文 toggle in the top-right (remembers your choice).
+
+Every dangerous action stops for your approval:
+
+![Authorization overlay](./docs/en-permission.png)
+
+Browse and resume the working directory's Claude history:
+
+![History sessions](./docs/en-sessions.png)
 
 ---
 
@@ -182,9 +200,14 @@ Health check: `GET /healthz` → `{"status":"ok"}`
 
 ```jsonc
 { "type": "user_message", "text": "check disk usage" }
+{ "type": "user_message", "text": "/context" }   // native slash commands work too
 { "type": "permission_response", "request_id": "...", "allow": true, "tool_input": { } }
 { "type": "close" }
 ```
+
+> Native Claude slash commands (`/clear`, `/compact`, `/context`, `/usage`, `/cost`,
+> `/init`, …) are just user messages whose text starts with `/` — Claude interprets them
+> over the same `stream-json` channel, so the console's command bar simply sends them.
 
 **Server → client**
 
@@ -214,6 +237,20 @@ All require `?token=<AGENT_TOKEN>`; all paths are relative to and jailed within
 | `POST /agent/fs/mkdir` | `{path}`. |
 | `DELETE /agent/fs/delete?path=` | Remove (cannot delete the jail root). |
 
+### Session-history HTTP API
+
+Read-only access to the **current working directory's** Claude session history (stored by
+the CLI under `~/.claude/projects/<slug>/<id>.jsonl`). Token-gated; same `{code, msg, data}`
+envelope.
+
+| Method & path | Purpose |
+|---------------|---------|
+| `GET /agent/sessions/list` | List this directory's sessions (`id`, `title`, `messages`, `mtime`, `size`) plus its `cwd`. |
+| `GET /agent/sessions/read?id=<uuid>` | Parse a session into a read-only transcript (`items[]` of `{role, blocks, ts}`). |
+
+To **resume** a session, just open a chat WebSocket with `&session_id=<id>` — Claude
+reattaches with `--resume` and the prior context.
+
 ---
 
 ## Development
@@ -242,6 +279,7 @@ server.go      HTTP/WebSocket routes, heartbeat, idle reaping
 bridge.go      drives the claude CLI subprocess (stream-json)
 protocol.go    translates claude messages → browser-friendly events
 fs.go          path-jailed file-manager endpoints
+sessions.go    read-only Claude session history (list + transcript)
 web.go         embeds & serves the console
 web/index.html the zero-dependency web console
 cmd/fakeclaude a stub claude for tests
