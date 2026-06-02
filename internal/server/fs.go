@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/base64"
@@ -14,14 +14,13 @@ import (
 	"strings"
 )
 
-// 文件操作上限：单文件读取 1MB，超出截断
 const maxReadBytes = 1 << 20
 
 var errOutsideRoot = errors.New("路径越界：仅允许操作工作目录及其子目录")
 
 // realRoot 返回经软链解析的工作目录绝对路径（围栏根）。
 func (s *Server) realRoot() (string, error) {
-	wd := s.cfg.resolvedWorkDir()
+	wd := s.cfg.ResolvedWorkDir()
 	abs, err := filepath.Abs(wd)
 	if err != nil {
 		return "", err
@@ -32,23 +31,18 @@ func (s *Server) realRoot() (string, error) {
 	return abs, nil
 }
 
-// safeResolve 把相对 work_dir 的路径解析为绝对路径，并强制围栏：
-// 1) 词法上 Clean 掉所有 ".." 越界；2) 软链解析后真实路径必须仍在围栏根内。
-// 返回的目标路径可用于实际读写（可能尚不存在）。
+// safeResolve 把相对 work_dir 的路径解析为绝对路径，并强制围栏。
 func (s *Server) safeResolve(rel string) (string, error) {
 	root, err := s.realRoot()
 	if err != nil {
 		return "", err
 	}
-	// 统一成相对：前置 "/" 再 Clean，可消除任何逃逸出根的 ".."
 	clean := filepath.Clean("/" + filepath.ToSlash(strings.TrimSpace(rel)))
 	target := filepath.Join(root, clean)
 
-	// 词法围栏
 	if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
 		return "", errOutsideRoot
 	}
-	// 软链围栏：解析最深的已存在祖先，拼回不存在的尾部，再校验
 	real, err := evalRealWithin(target)
 	if err != nil {
 		return "", err
@@ -59,8 +53,7 @@ func (s *Server) safeResolve(rel string) (string, error) {
 	return target, nil
 }
 
-// evalRealWithin 解析 target 路径中已存在部分的真实路径（消解软链），
-// 再把尚不存在的尾部原样拼回，用于校验“即将创建的位置”是否越界。
+// evalRealWithin 解析 target 路径中已存在部分的真实路径，再把尚不存在的尾部原样拼回。
 func evalRealWithin(target string) (string, error) {
 	p := target
 	var tail []string
@@ -78,14 +71,12 @@ func evalRealWithin(target string) (string, error) {
 		}
 		parent := filepath.Dir(p)
 		if parent == p {
-			return target, nil // 到根都不存在，按词法结果返回
+			return target, nil
 		}
 		tail = append(tail, filepath.Base(p))
 		p = parent
 	}
 }
-
-// ── HTTP 处理器 ────────────────────────────────────────────────────────────
 
 type fsEntry struct {
 	Name  string `json:"name"`
@@ -122,7 +113,6 @@ func (s *Server) handleFsList(w http.ResponseWriter, r *http.Request) {
 			Mtime: fi.ModTime().Format("2006-01-02 15:04:05"),
 		})
 	}
-	// 目录在前，再按名称排序
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].IsDir != entries[j].IsDir {
 			return entries[i].IsDir
@@ -199,7 +189,6 @@ func (s *Server) handleFsWrite(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 0, "ok", nil)
 }
 
-// 上传单文件上限 50MB（base64 解码后）
 const maxUploadBytes = 50 << 20
 
 func (s *Server) handleFsUpload(w http.ResponseWriter, r *http.Request) {
@@ -264,7 +253,7 @@ func (s *Server) handleFsMkdir(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 0, "ok", nil)
 }
 
-// handleFsDownload 流式下载工作目录内的文件（支持任意类型/大小，围栏不变）。
+// handleFsDownload 流式下载工作目录内的文件。
 func (s *Server) handleFsDownload(w http.ResponseWriter, r *http.Request) {
 	if !s.authed(r) {
 		writeJSON(w, 401, "unauthorized", nil)
@@ -290,7 +279,6 @@ func (s *Server) handleFsDownload(w http.ResponseWriter, r *http.Request) {
 	name := filepath.Base(abs)
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.FormatInt(fi.Size(), 10))
-	// 同时给 ASCII 兜底名与 RFC5987 UTF-8 名，兼容中文文件名
 	w.Header().Set("Content-Disposition",
 		"attachment; filename=\"download\"; filename*=UTF-8''"+url.PathEscape(name))
 	w.WriteHeader(http.StatusOK)
@@ -324,8 +312,6 @@ func (s *Server) handleFsDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 0, "ok", nil)
 }
 
-// handleFsTree 递归列出工作目录下的相对路径（供前端 @ 文件选择），
-// 跳过 .git/node_modules 等重目录，最多返回 maxTreeEntries 条。
 const maxTreeEntries = 3000
 
 var skipDirs = map[string]bool{

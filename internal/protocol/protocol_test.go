@@ -1,13 +1,15 @@
-package main
+package protocol_test
 
 import (
 	"encoding/json"
 	"testing"
+
+	"claude-agent/internal/protocol"
 )
 
 func mustTranslate(t *testing.T, raw string) (map[string]any, bool) {
 	t.Helper()
-	return translate([]byte(raw))
+	return protocol.Translate([]byte(raw))
 }
 
 func TestTranslateCanUseToolToPermissionRequest(t *testing.T) {
@@ -69,7 +71,7 @@ func TestTranslateToolResult(t *testing.T) {
 
 func TestTranslateResult(t *testing.T) {
 	ev, ok := mustTranslate(t, `{"type":"result","subtype":"success","is_error":false,"result":"完成"}`)
-	if !ok || ev["type"] != "result" || ev["result"] != "完成" || boolOf(ev["is_error"]) {
+	if !ok || ev["type"] != "result" || ev["result"] != "完成" || protocol.BoolOf(ev["is_error"]) {
 		t.Fatalf("result 翻译错误: %+v", ev)
 	}
 }
@@ -91,15 +93,15 @@ func TestTranslateUnknownReturnsFalse(t *testing.T) {
 }
 
 func TestStringifyContent(t *testing.T) {
-	if stringifyContent(nil) != "" {
+	if protocol.StringifyContent(nil) != "" {
 		t.Fatal("nil")
 	}
-	if stringifyContent("hello") != "hello" {
+	if protocol.StringifyContent("hello") != "hello" {
 		t.Fatal("string")
 	}
 	var blocks []any
 	_ = json.Unmarshal([]byte(`[{"type":"text","text":"a"},{"type":"text","text":"b"}]`), &blocks)
-	if got := stringifyContent(blocks); got != "a\nb" {
+	if got := protocol.StringifyContent(blocks); got != "a\nb" {
 		t.Fatalf("list=%q", got)
 	}
 }

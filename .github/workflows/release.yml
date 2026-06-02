@@ -36,7 +36,7 @@ jobs:
             bin="claude-agent"; [ "$os" = "windows" ] && bin="claude-agent.exe"
             echo ">> building $os/$arch"
             GOOS="$os" GOARCH="$arch" go build -trimpath \
-              -ldflags "-s -w -X main.version=${VERSION}" -o "$bin" .
+              -ldflags "-s -w -X main.version=${VERSION}" -o "$bin" ./cmd/claude-agent
             base="claude-agent_${VERSION}_${os}_${arch}"
             if [ "$os" = "windows" ]; then
               zip -q "dist/${base}.zip" "$bin" README.md README.zh-CN.md LICENSE

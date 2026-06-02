@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"os"
@@ -48,8 +48,8 @@ func envOr(key, def string) string {
 	return def
 }
 
-// resolvedWorkDir 空则回退到运行用户 HOME，保证 cwd 一定存在。
-func (c Config) resolvedWorkDir() string {
+// ResolvedWorkDir 空则回退到运行用户 HOME，保证 cwd 一定存在。
+func (c Config) ResolvedWorkDir() string {
 	if c.WorkDir != "" {
 		if info, err := os.Stat(c.WorkDir); err == nil && info.IsDir() {
 			return c.WorkDir

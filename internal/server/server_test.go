@@ -1,19 +1,43 @@
-package main
+package server_test
 
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"claude-agent/internal/config"
+	"claude-agent/internal/server"
 )
+
+var fakeClaudePath string
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "fakeclaude")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(dir)
+
+	fakeClaudePath = filepath.Join(dir, "fakeclaude")
+	build := exec.Command("go", "build", "-o", fakeClaudePath, "claude-agent/cmd/fakeclaude")
+	build.Stdout, build.Stderr = os.Stdout, os.Stderr
+	if err := build.Run(); err != nil {
+		panic("构建 fakeclaude 失败: " + err.Error())
+	}
+	os.Exit(m.Run())
+}
 
 func startTestServer(t *testing.T, token string) *httptest.Server {
 	t.Helper()
-	cfg := Config{Token: token, ClaudeBin: fakeClaudePath, WorkDir: "/tmp", PermissionMode: "default"}
-	return httptest.NewServer(NewServer(cfg).Routes())
+	cfg := config.Config{Token: token, ClaudeBin: fakeClaudePath, WorkDir: "/tmp", PermissionMode: "default"}
+	return httptest.NewServer(server.NewServer(cfg).Routes())
 }
 
 func wsURL(ts *httptest.Server, path string) string {
@@ -60,8 +84,8 @@ func TestChatRejectsMissingToken(t *testing.T) {
 }
 
 func TestChatIdleTimeoutClosesConnection(t *testing.T) {
-	cfg := Config{Token: "secret", ClaudeBin: fakeClaudePath, WorkDir: "/tmp", IdleTimeoutSec: 1}
-	ts := httptest.NewServer(NewServer(cfg).Routes())
+	cfg := config.Config{Token: "secret", ClaudeBin: fakeClaudePath, WorkDir: "/tmp", IdleTimeoutSec: 1}
+	ts := httptest.NewServer(server.NewServer(cfg).Routes())
 	defer ts.Close()
 
 	c, _, err := websocket.DefaultDialer.Dial(wsURL(ts, "/agent/chat?token=secret"), nil)
@@ -70,12 +94,11 @@ func TestChatIdleTimeoutClosesConnection(t *testing.T) {
 	}
 	defer c.Close()
 
-	// 不发任何用户消息 → 空闲；持续读取以处理 ping/close，期望被服务端关闭
 	c.SetReadDeadline(time.Now().Add(8 * time.Second))
 	closed := false
 	for {
 		if _, _, err := c.ReadMessage(); err != nil {
-			closed = true // 服务端因空闲主动关闭
+			closed = true
 			break
 		}
 	}
@@ -94,17 +117,14 @@ func TestChatFullRoundtripOverWebSocket(t *testing.T) {
 	}
 	defer c.Close()
 
-	// ready
 	if ev := readJSON(t, c); ev["type"] != "ready" {
 		t.Fatalf("应为 ready: %+v", ev)
 	}
 
-	// 发用户消息
 	if err := c.WriteJSON(map[string]any{"type": "user_message", "text": "执行 echo hi"}); err != nil {
 		t.Fatalf("WriteJSON: %v", err)
 	}
 
-	// 收到 assistant + permission_request（顺序读取直到拿到权限请求）
 	var perm map[string]any
 	for i := 0; i < 10; i++ {
 		ev := readJSON(t, c)
@@ -117,14 +137,12 @@ func TestChatFullRoundtripOverWebSocket(t *testing.T) {
 		t.Fatalf("未收到权限请求: %+v", perm)
 	}
 
-	// 放行
 	if err := c.WriteJSON(map[string]any{
 		"type": "permission_response", "request_id": "perm_1", "allow": true,
 	}); err != nil {
 		t.Fatalf("WriteJSON: %v", err)
 	}
 
-	// 收到 tool_result + result
 	var result map[string]any
 	for i := 0; i < 10; i++ {
 		ev := readJSON(t, c)

@@ -1,10 +1,12 @@
-package main
+package server
 
 import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"claude-agent/internal/config"
 )
 
 func TestProjectSlug(t *testing.T) {
@@ -19,7 +21,6 @@ func TestProjectSlug(t *testing.T) {
 	}
 }
 
-// 准备一个假的 ~/.claude/projects/<slug>/<id>.jsonl，返回 server 与 session id。
 func newSessionServer(t *testing.T) (*Server, string) {
 	t.Helper()
 	home := t.TempDir()
@@ -44,7 +45,7 @@ func newSessionServer(t *testing.T) (*Server, string) {
 	if err := os.WriteFile(filepath.Join(dir, id+".jsonl"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return NewServer(Config{Token: "t", WorkDir: work}), id
+	return NewServer(config.Config{Token: "t", WorkDir: work}), id
 }
 
 func TestSessionsListAndRead(t *testing.T) {
@@ -52,7 +53,6 @@ func TestSessionsListAndRead(t *testing.T) {
 	ts := httptest.NewServer(s.Routes())
 	defer ts.Close()
 
-	// list
 	r := doFs(t, ts, "GET", "/agent/sessions/list?token=t", "")
 	if r["code"].(float64) != 0 {
 		t.Fatalf("list 失败: %v", r)
@@ -73,7 +73,6 @@ func TestSessionsListAndRead(t *testing.T) {
 		t.Fatalf("消息数应为 3: %v", first["messages"])
 	}
 
-	// read
 	r = doFs(t, ts, "GET", "/agent/sessions/read?token=t&id="+id, "")
 	if r["code"].(float64) != 0 {
 		t.Fatalf("read 失败: %v", r)
@@ -86,7 +85,6 @@ func TestSessionsListAndRead(t *testing.T) {
 	if it0["role"] != "user" {
 		t.Fatalf("首条应为 user: %v", it0)
 	}
-	// assistant 第二条应含 text + tool_use 两个 block
 	it1 := items[1].(map[string]any)
 	blocks := it1["blocks"].([]any)
 	if it1["role"] != "assistant" || len(blocks) != 2 {

@@ -1,4 +1,4 @@
-package main
+package bridge
 
 import (
 	"bufio"
@@ -10,12 +10,15 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+
+	"claude-agent/internal/config"
+	"claude-agent/internal/protocol"
 )
 
 // Bridge 驱动本机 claude code CLI 的 stream-json 双向控制协议。
 // 一个 WebSocket 连接对应一个 Bridge（= 一个 claude 子进程 = 一轮对话）。
 type Bridge struct {
-	cfg    Config
+	cfg    config.Config
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	events chan map[string]any
@@ -25,7 +28,7 @@ type Bridge struct {
 	reqCounter int
 }
 
-func NewBridge(cfg Config) *Bridge {
+func NewBridge(cfg config.Config) *Bridge {
 	return &Bridge{cfg: cfg, events: make(chan map[string]any, 64)}
 }
 
@@ -38,7 +41,7 @@ func (b *Bridge) Events() <-chan map[string]any {
 func (b *Bridge) Start() error {
 	args := b.buildArgs()
 	b.cmd = exec.Command(args[0], args[1:]...)
-	b.cmd.Dir = b.cfg.resolvedWorkDir()
+	b.cmd.Dir = b.cfg.ResolvedWorkDir()
 	b.cmd.Env = filteredEnv()
 
 	stdin, err := b.cmd.StdinPipe()
@@ -72,15 +75,12 @@ func (b *Bridge) buildArgs() []string {
 		"--output-format", "stream-json",
 		"--verbose",
 		"--permission-mode", orDefault(b.cfg.PermissionMode, "default"),
-		// 关键：让 CLI 把权限请求经 stdio 控制协议发出（can_use_tool control_request），
-		// 否则需授权的操作会被直接当"未授权"拒绝，不会触发我们的权限弹窗。
 		"--permission-prompt-tool", "stdio",
 	}
 	if b.cfg.Model != "" {
 		args = append(args, "--model", b.cfg.Model)
 	}
 	if b.cfg.SessionID != "" {
-		// 续接历史会话，恢复 claude 上下文
 		args = append(args, "--resume", b.cfg.SessionID)
 	}
 	return args
@@ -147,7 +147,7 @@ func (b *Bridge) readLoop(stdout, stderr io.Reader) {
 		if len(line) > 0 {
 			trimmed := strings.TrimSpace(string(line))
 			if trimmed != "" {
-				ev, ok := translate([]byte(trimmed))
+				ev, ok := protocol.Translate([]byte(trimmed))
 				if debug {
 					head := trimmed
 					if len(head) > 120 {
@@ -171,7 +171,6 @@ func (b *Bridge) readLoop(stdout, stderr io.Reader) {
 	if len(errMsg) > 2000 {
 		errMsg = errMsg[:2000]
 	}
-	// 回收子进程，避免被 Kill 后残留僵尸进程(defunct)占用 PID 表
 	if b.cmd != nil {
 		_ = b.cmd.Wait()
 	}

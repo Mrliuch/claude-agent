@@ -1,4 +1,4 @@
-package main
+package bridge_test
 
 import (
 	"os"
@@ -6,9 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"claude-agent/internal/bridge"
+	"claude-agent/internal/config"
+	"claude-agent/internal/protocol"
 )
 
-// fakeClaudePath 指向测试期编译出的假 claude 二进制。
 var fakeClaudePath string
 
 func TestMain(m *testing.M) {
@@ -19,7 +22,7 @@ func TestMain(m *testing.M) {
 	defer os.RemoveAll(dir)
 
 	fakeClaudePath = filepath.Join(dir, "fakeclaude")
-	build := exec.Command("go", "build", "-o", fakeClaudePath, "./cmd/fakeclaude")
+	build := exec.Command("go", "build", "-o", fakeClaudePath, "claude-agent/cmd/fakeclaude")
 	build.Stdout, build.Stderr = os.Stdout, os.Stderr
 	if err := build.Run(); err != nil {
 		panic("构建 fakeclaude 失败: " + err.Error())
@@ -57,19 +60,17 @@ func findEvent(events []map[string]any, typ string) map[string]any {
 }
 
 func TestBridgeFullPermissionRoundtrip(t *testing.T) {
-	b := NewBridge(Config{ClaudeBin: fakeClaudePath, WorkDir: "/tmp"})
+	b := bridge.NewBridge(config.Config{ClaudeBin: fakeClaudePath, WorkDir: "/tmp"})
 	if err := b.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	defer b.Close()
 
-	// 1) ready
 	ev := <-b.Events()
 	if ev["type"] != "ready" || ev["cwd"] != "/fake/dir" {
 		t.Fatalf("首个事件应为 ready: %+v", ev)
 	}
 
-	// 2) 发用户消息 → assistant + permission_request
 	if err := b.SendUserMessage("帮我执行 echo hi"); err != nil {
 		t.Fatalf("SendUserMessage: %v", err)
 	}
@@ -82,7 +83,6 @@ func TestBridgeFullPermissionRoundtrip(t *testing.T) {
 		t.Fatalf("权限请求错误: %+v", perm)
 	}
 
-	// 3) 放行 → tool_result + result
 	if err := b.RespondPermission("perm_1", true, map[string]any{"command": "echo hi"}); err != nil {
 		t.Fatalf("RespondPermission: %v", err)
 	}
@@ -92,13 +92,13 @@ func TestBridgeFullPermissionRoundtrip(t *testing.T) {
 		t.Fatalf("缺少 tool_result: %+v", events)
 	}
 	res := findEvent(events, "result")
-	if res == nil || boolOf(res["is_error"]) || res["result"] != "完成" {
+	if res == nil || protocol.BoolOf(res["is_error"]) || res["result"] != "完成" {
 		t.Fatalf("result 错误: %+v", res)
 	}
 }
 
 func TestBridgeDenyPermission(t *testing.T) {
-	b := NewBridge(Config{ClaudeBin: fakeClaudePath, WorkDir: "/tmp"})
+	b := bridge.NewBridge(config.Config{ClaudeBin: fakeClaudePath, WorkDir: "/tmp"})
 	if err := b.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}

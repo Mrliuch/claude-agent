@@ -1,12 +1,10 @@
-package main
+package server
 
 import (
 	"embed"
 	"net/http"
 )
 
-// webFS 把内置的零依赖单文件 Web 控制台编进二进制。
-//
 //go:embed web/index.html
 var webFS embed.FS
 

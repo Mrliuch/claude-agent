@@ -8,7 +8,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/claude-agent .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/claude-agent ./cmd/claude-agent
 
 # ── 运行阶段：内置 Node + claude code CLI ──────────────────────────────────
 # 注意：容器内的 claude 只能访问容器内部。若要排查“宿主机”问题，
