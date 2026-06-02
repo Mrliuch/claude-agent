@@ -1,0 +1,19 @@
+# compiled binaries
+/claude-agent
+/smoke
+/fakeclaude
+*.exe
+
+# go test / build artifacts
+*.out
+*.test
+
+# editor / OS
+.idea/
+.vscode/
+.DS_Store
+
+# logs & env
+*.log
+.env
+.env.*
