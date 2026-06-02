@@ -8,9 +8,20 @@ package main
 
 import (
 	"log"
+	"os"
 )
 
+// version 由发布构建通过 -ldflags "-X main.version=vX.Y.Z" 注入；本地构建为 dev。
+var version = "dev"
+
 func main() {
+	// 轻量 --version/-v：方便 CI 与部署核对二进制版本。
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		log.SetFlags(0)
+		log.Printf("claude-agent %s", version)
+		return
+	}
+	log.Printf("[claude-agent] version %s", version)
 	cfg := LoadConfig()
 	if cfg.Token == "" {
 		log.Fatal("[claude-agent] 必须设置环境变量 AGENT_TOKEN（共享鉴权 token，客户端需携带）")
