@@ -122,6 +122,9 @@
   .caret::after { content: "▌"; animation: blink 1.1s steps(1) infinite; } @keyframes blink { 50% { opacity: 0; } }
   textarea#input { flex: 1; resize: none; background: transparent; border: 0; outline: 0; color: var(--txt); font-family: var(--mono); font-size: 13.5px; line-height: 1.55; max-height: 180px; padding: 2px 0; }
   textarea#input::placeholder { color: var(--faint); }
+  .attachBtn { width: 28px; height: 28px; padding: 0; background: transparent; border: 1px solid var(--line-2); border-radius: var(--radius); color: var(--dim); font-size: 14px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; transition: border-color .14s, color .14s; }
+  .attachBtn:hover:not(:disabled) { border-color: var(--amber-dim); color: var(--amber); }
+  .uploading-tag { display: inline-flex; align-items: center; gap: 5px; background: rgba(79,214,196,.1); border: 1px solid rgba(79,214,196,.3); border-radius: 4px; padding: 2px 8px; font-size: 11px; color: var(--teal); margin-top: 5px; }
   .composer .meta { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; padding: 0 2px; gap: 12px; }
   .composer .meta .cwd { color: var(--faint); font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .composer .meta .cwd b { color: var(--teal); font-weight: 500; }
@@ -236,8 +239,11 @@
           <div class="prompt">
             <span class="caret"></span>
             <textarea id="input" rows="1" disabled></textarea>
+            <button class="attachBtn iconbtn" id="attachBtn" title="Attach file / paste image (📎)" disabled>📎</button>
+            <input type="file" id="fileInput" style="display:none" />
             <button class="primary" id="sendBtn" data-i18n="btn_send" disabled>SEND</button>
           </div>
+          <div id="uploadStatus" style="display:none"></div>
           <div class="meta">
             <div class="cwd" id="cwd"></div>
             <div class="hk" data-i18n-html="hotkeys_html"></div>
@@ -340,6 +346,11 @@
     btn_q_skip: { en: "SKIP", zh: "跳过" },
     btn_q_submit: { en: "SUBMIT", zh: "提交" },
     result_interrupted: { en: "interrupted", zh: "已中断" },
+    upload_converting: { en: "Converting…", zh: "转换中…" },
+    upload_uploading: { en: "Uploading…", zh: "上传中…" },
+    upload_done: { en: "Attached: ", zh: "已附加：" },
+    upload_err: { en: "Upload failed: ", zh: "上传失败：" },
+    upload_no_token: { en: "Enter token first", zh: "请先填入 token" },
     btn_connect: { en: "CONNECT", zh: "连接" },
     btn_disconnect: { en: "DISCONNECT", zh: "断开" },
     btn_deny: { en: "DENY", zh: "拒绝" },
@@ -361,7 +372,7 @@
     cwd_disconnected: { en: "disconnected", zh: "未连接" },
     cwd_ready: { en: "ready", zh: "已就绪" },
     empty_html: { en: "REMOTE CLAUDE CODE · OVER WEBSOCKET<br/>Enter the <kbd>agent</kbd> URL and <kbd>token</kbd>, hit <kbd>CONNECT</kbd> to reach the target host<br/>Every dangerous action asks for your approval right here", zh: "远程 CLAUDE CODE · 基于 WEBSOCKET<br/>填入 <kbd>地址</kbd> 与 <kbd>令牌</kbd>，按 <kbd>连接</kbd> 接入目标机<br/>危险操作会在此弹窗请求授权 — 你说了才算" },
-    hotkeys_html: { en: "<b>Enter</b> send · <b>Shift+Enter</b> newline · <b>⌘/Ctrl+K</b> new session", zh: "<b>Enter</b> 发送 · <b>Shift+Enter</b> 换行 · <b>⌘/Ctrl+K</b> 新会话" },
+    hotkeys_html: { en: "<b>Enter</b> send · <b>Shift+Enter</b> newline · <b>⌘/Ctrl+K</b> new session · <b>📎</b> or paste to attach", zh: "<b>Enter</b> 发送 · <b>Shift+Enter</b> 换行 · <b>⌘/Ctrl+K</b> 新会话 · <b>📎</b> 或粘贴上传" },
     tag_you: { en: "you", zh: "你" },
     tag_claude: { en: "claude", zh: "claude" },
     tag_output: { en: "output", zh: "输出" },
@@ -495,6 +506,7 @@
   }
   function setComposerEnabled(on) {
     $("#input").disabled = !on || state.thinking;
+    $("#attachBtn").disabled = !on;
     if (!state.thinking) { const btn = $("#sendBtn"); btn.disabled = !on; btn.textContent = t("btn_send"); btn.className = "primary"; }
     document.querySelectorAll("#cmdbar .cmd").forEach((b) => (b.disabled = !on));
   }
@@ -598,6 +610,101 @@
   }
   $("#permAllow").addEventListener("click", () => respondPermission(true));
   $("#permDeny").addEventListener("click", () => respondPermission(false));
+
+  // ── file attach (📎 button + paste) ────────────────────
+  const CLAUDE_IMG_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+
+  // convertToPng 用 canvas 把 BMP 等浏览器可解析但 claude 不支持的格式转 PNG。
+  // TIFF 浏览器本身无法解码，跳过（直接以原始文件传给 claude，可能无法识别）。
+  function convertToPng(file) {
+    return new Promise((resolve) => {
+      if (CLAUDE_IMG_TYPES.has(file.type)) { resolve(file); return; }
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        c.getContext("2d").drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        c.toBlob((blob) => resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".png"), { type: "image/png" })), "image/png");
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); }; // 无法解码则原样传
+      img.src = url;
+    });
+  }
+
+  function setUploadStatus(msg, show) {
+    const el = $("#uploadStatus");
+    if (!show) { el.style.display = "none"; return; }
+    el.style.display = "block";
+    el.innerHTML = `<span class="uploading-tag">${esc(msg)}</span>`;
+  }
+
+  async function uploadAndAttach(rawFile) {
+    if (!tokenInput.value.trim()) { toast(t("upload_no_token")); return; }
+    try {
+      setUploadStatus(t("upload_converting"), true);
+      const file = rawFile.type.startsWith("image/") ? await convertToPng(rawFile) : rawFile;
+
+      setUploadStatus(t("upload_uploading"), true);
+      // 确保 chat_uploads/ 目录存在（幂等：已存在不报错）
+      await fetch(apiURL("fs", "mkdir"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "chat_uploads" })
+      });
+
+      const safe = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+      const relPath = `chat_uploads/${Date.now()}_${safe}`;
+      const b64 = await new Promise((res) => {
+        const fr = new FileReader();
+        fr.onload = () => res(fr.result.split(",")[1]);
+        fr.readAsDataURL(file);
+      });
+      const resp = await fetch(apiURL("fs", "upload"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: relPath, content_b64: b64 })
+      });
+      const j = await resp.json();
+      if (j.code !== 0) throw new Error(j.msg || "upload error");
+
+      // 插入 @路径 到输入框（让 claude 通过 Read 工具读取）
+      const inp = $("#input");
+      const ref = `@${relPath}`;
+      const pos = inp.selectionStart || inp.value.length;
+      inp.value = inp.value.slice(0, pos) + (pos > 0 && inp.value[pos - 1] !== " " ? " " : "") + ref + " " + inp.value.slice(pos);
+      autosize();
+      setUploadStatus(t("upload_done") + relPath, true);
+      setTimeout(() => setUploadStatus("", false), 3000);
+      inp.focus();
+    } catch (err) {
+      setUploadStatus("", false);
+      toast(t("upload_err") + err.message);
+    }
+  }
+
+  // 📎 按钮点击
+  $("#attachBtn").addEventListener("click", () => $("#fileInput").click());
+  $("#fileInput").addEventListener("change", (e) => {
+    const f = e.target.files[0]; if (f) uploadAndAttach(f);
+    e.target.value = "";
+  });
+
+  // 粘贴上传：截图 / 复制的文件直接粘贴到输入框
+  $("#input").addEventListener("paste", (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    const files = [];
+    for (const item of items) {
+      if (item.kind === "file") {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length) {
+      e.preventDefault();
+      files.forEach((f) => uploadAndAttach(f));
+    }
+  });
 
   // ── AskUserQuestion modal ───────────────────────────────
   function showQuestion(ev) {
