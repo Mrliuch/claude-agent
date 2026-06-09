@@ -32,10 +32,13 @@ func main() {
 		switch msg["type"] {
 		case "control_request":
 			req, _ := msg["request"].(map[string]any)
-			if req["subtype"] == "initialize" {
+			switch req["subtype"] {
+			case "initialize":
 				emit(map[string]any{"type": "control_response", "response": map[string]any{
 					"subtype": "success", "request_id": msg["request_id"], "response": map[string]any{},
 				}})
+			case "interrupt":
+				emit(map[string]any{"type": "result", "subtype": "interrupted", "is_error": false, "result": "已中断"})
 			}
 		case "user":
 			emit(map[string]any{"type": "assistant", "message": map[string]any{"content": []any{

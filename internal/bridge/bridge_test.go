@@ -116,3 +116,28 @@ func TestBridgeDenyPermission(t *testing.T) {
 		t.Fatalf("拒绝结果错误: %+v", res)
 	}
 }
+
+func TestBridgeInterruptEndsTurn(t *testing.T) {
+	b := bridge.NewBridge(config.Config{ClaudeBin: fakeClaudePath, WorkDir: "/tmp"})
+	if err := b.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer b.Close()
+
+	if ev := <-b.Events(); ev["type"] != "ready" {
+		t.Fatalf("应为 ready: %+v", ev)
+	}
+	// 发起一轮 → 进入等待权限的"运行中"状态
+	_ = b.SendUserMessage("执行点啥")
+	collectUntil(t, b.Events(), "permission_request", 10)
+
+	// 中断当前轮次：应收到一条中断 result，会话进程仍存活
+	if err := b.Interrupt(); err != nil {
+		t.Fatalf("Interrupt: %v", err)
+	}
+	events := collectUntil(t, b.Events(), "result", 10)
+	res := findEvent(events, "result")
+	if res == nil || res["subtype"] != "interrupted" || res["result"] != "已中断" {
+		t.Fatalf("中断结果错误: %+v", res)
+	}
+}

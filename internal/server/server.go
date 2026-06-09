@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -56,6 +58,25 @@ func (s *Server) Routes() *http.ServeMux {
 	return mux
 }
 
+// resolveWorkSubdir 校验客户端选择的工作目录子文件夹：
+// 返回围栏内、已存在目录的绝对路径；空串/越界/非目录一律返回 ""（调用方回退到根）。
+func (s *Server) resolveWorkSubdir(sub string) string {
+	sub = strings.TrimSpace(sub)
+	if sub == "" {
+		return ""
+	}
+	target, err := s.safeResolve(sub)
+	if err != nil {
+		log.Printf("[claude-agent] work_subdir 越界已忽略: %s (%v)", sub, err)
+		return ""
+	}
+	if fi, e := os.Stat(target); e != nil || !fi.IsDir() {
+		log.Printf("[claude-agent] work_subdir 无效(非目录或不存在): %s", sub)
+		return ""
+	}
+	return target
+}
+
 // authed 校验共享 token（query 参数）。
 func (s *Server) authed(r *http.Request) bool {
 	return s.cfg.Token != "" && r.URL.Query().Get("token") == s.cfg.Token
@@ -82,6 +103,12 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 
 	cfg := s.cfg
 	cfg.SessionID = r.URL.Query().Get("session_id")
+
+	// 按连接选择工作目录子文件夹：必须落在配置根目录的围栏内且为已存在目录，
+	// 校验通过后把 claude 进程 cwd 覆盖为该子目录绝对路径（文件管理围栏不受影响）。
+	if dir := s.resolveWorkSubdir(r.URL.Query().Get("work_subdir")); dir != "" {
+		cfg.WorkDir = dir
+	}
 
 	b := bridge.NewBridge(cfg)
 	if err := b.Start(); err != nil {
@@ -182,6 +209,16 @@ func handleClientMessage(b *bridge.Bridge, data []byte) {
 		if reqID := protocol.StrOr(msg["request_id"], ""); reqID != "" {
 			allow, _ := msg["allow"].(bool)
 			_ = b.RespondPermission(reqID, allow, msg["tool_input"])
+		}
+	case "interrupt":
+		_ = b.Interrupt()
+	case "question_response":
+		if reqID := protocol.StrOr(msg["request_id"], ""); reqID != "" {
+			answers, _ := msg["answers"].(map[string]any)
+			if answers == nil {
+				answers = map[string]any{}
+			}
+			_ = b.RespondAskUserQuestion(reqID, answers)
 		}
 	case "close":
 		b.Close()

@@ -26,6 +26,11 @@ type Bridge struct {
 	writeMu    sync.Mutex
 	closeOnce  sync.Once
 	reqCounter int
+
+	// AskUserQuestion：缓存原始 questions（control_request 阶段）与用户答案（question_response 阶段）
+	askMu        sync.Mutex
+	askQuestions []any
+	askAnswers   map[string]any
 }
 
 func NewBridge(cfg config.Config) *Bridge {
@@ -115,6 +120,97 @@ func (b *Bridge) RespondPermission(requestID string, allow bool, updatedInput an
 	})
 }
 
+// SendToolResult 向 claude 注入一条 tool_result，用于响应需要 tool_result 回路的工具。
+func (b *Bridge) SendToolResult(toolUseID string, content string) error {
+	return b.write(map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []any{
+				map[string]any{
+					"type":        "tool_result",
+					"tool_use_id": toolUseID,
+					"content":     content,
+				},
+			},
+		},
+	})
+}
+
+// RespondAskUserQuestion 批准 AskUserQuestion 并把答案注入 updatedInput。
+// updatedInput 必须同时包含：
+//   - questions: 原始问题数组（Claude Code 内部调用 questions.map()，缺失会 crash）
+//   - answers: {问题文本: 答案} 对象（Claude Code 从这里读取每题的回答）
+//   - annotations: {} 附加注释（可为空对象，不可缺失）
+func (b *Bridge) RespondAskUserQuestion(requestID string, answers map[string]any) error {
+	b.askMu.Lock()
+	questions := b.askQuestions
+	b.askAnswers = answers
+	b.askMu.Unlock()
+
+	annotations := make(map[string]any, len(answers))
+	for k := range answers {
+		annotations[k] = map[string]any{"notes": ""}
+	}
+
+	return b.write(map[string]any{
+		"type": "control_response",
+		"response": map[string]any{
+			"subtype":    "success",
+			"request_id": requestID,
+			"response": map[string]any{
+				"behavior": "allow",
+				"updatedInput": map[string]any{
+					"questions":   questions,
+					"answers":     answers,
+					"annotations": annotations,
+				},
+			},
+		},
+	})
+}
+
+// Interrupt 中断 claude 当前轮次，但保留会话上下文（不杀进程，可继续对话）。
+// 发送标准 stream-json 控制帧 control_request{subtype:interrupt}。
+func (b *Bridge) Interrupt() error {
+	b.reqCounter++
+	return b.write(map[string]any{
+		"type":       "control_request",
+		"request_id": fmt.Sprintf("interrupt_%d", b.reqCounter),
+		"request":    map[string]any{"subtype": "interrupt"},
+	})
+}
+
+// processEvents 下发前处理：
+// - user_question：缓存原始 questions 供 RespondAskUserQuestion 使用
+// - assistant 块中 AskUserQuestion tool_use：跳过展示（用户已看到问卷卡片）
+func (b *Bridge) processEvents(ev map[string]any) []map[string]any {
+	if ev["type"] == "user_question" {
+		if qs, ok := ev["questions"].([]any); ok && len(qs) > 0 {
+			b.askMu.Lock()
+			b.askQuestions = qs
+			b.askMu.Unlock()
+		}
+		return []map[string]any{ev}
+	}
+
+	if ev["type"] != "assistant" {
+		return []map[string]any{ev}
+	}
+	blocks, _ := ev["blocks"].([]map[string]any)
+	var regular []map[string]any
+	for _, block := range blocks {
+		if block["kind"] == "tool_use" && block["name"] == "AskUserQuestion" {
+			continue // 不推送到前端，用户已看到问卷卡片
+		}
+		regular = append(regular, block)
+	}
+	if len(regular) == 0 {
+		return nil
+	}
+	return []map[string]any{{"type": "assistant", "blocks": regular}}
+}
+
 func (b *Bridge) sendInitialize() {
 	b.reqCounter++
 	_ = b.write(map[string]any{
@@ -156,7 +252,9 @@ func (b *Bridge) readLoop(stdout, stderr io.Reader) {
 					log.Printf("[bridge] read(forward=%v): %s", ok, head)
 				}
 				if ok {
-					b.events <- ev
+					for _, e := range b.processEvents(ev) {
+						b.events <- e
+					}
 				}
 			}
 		}

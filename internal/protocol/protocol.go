@@ -15,10 +15,22 @@ func Translate(raw []byte) (map[string]any, bool) {
 	case "control_request":
 		req, _ := m["request"].(map[string]any)
 		if sub, _ := req["subtype"].(string); sub == "can_use_tool" {
+			toolName := StrOr(req["tool_name"], "")
+			// AskUserQuestion：答案必须随 control_response.updatedInput 一起返回，
+			// 不走权限弹窗，直接转为 user_question 事件等待用户填写。
+			if toolName == "AskUserQuestion" {
+				input, _ := req["input"].(map[string]any)
+				questions, _ := input["questions"].([]any)
+				return map[string]any{
+					"type":       "user_question",
+					"request_id": m["request_id"],
+					"questions":  questions,
+				}, true
+			}
 			return map[string]any{
 				"type":        "permission_request",
 				"request_id":  m["request_id"],
-				"tool_name":   StrOr(req["tool_name"], ""),
+				"tool_name":   toolName,
 				"tool_input":  req["input"],
 				"title":       StrOr(req["title"], ""),
 				"description": StrOr(req["description"], ""),
@@ -47,6 +59,8 @@ func Translate(raw []byte) (map[string]any, bool) {
 			"is_error":       BoolOf(m["is_error"]),
 			"duration_ms":    m["duration_ms"],
 			"total_cost_usd": m["total_cost_usd"],
+			"num_turns":      m["num_turns"],
+			"usage":          m["usage"],
 			"result":         StrOr(m["result"], ""),
 		}, true
 
@@ -77,6 +91,7 @@ func ExtractAssistantBlocks(m map[string]any) []map[string]any {
 		case "tool_use":
 			blocks = append(blocks, map[string]any{
 				"kind":  "tool_use",
+				"id":    StrOr(block["id"], ""),
 				"name":  StrOr(block["name"], ""),
 				"input": block["input"],
 			})

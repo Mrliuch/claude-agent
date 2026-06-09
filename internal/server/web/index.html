@@ -52,7 +52,7 @@
   .field:focus-within { border-color: var(--amber-dim); box-shadow: 0 0 0 1px rgba(255,180,84,.25); }
   .field label { color: var(--faint); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
   .field input { background: transparent; border: 0; outline: 0; color: var(--txt); font-family: var(--mono); font-size: 12.5px; min-width: 60px; }
-  .field.url { flex: 1 1 240px; } .field.url input { width: 100%; } .field.tok { flex: 0 1 200px; }
+  .field.url { flex: 1 1 240px; } .field.url input { width: 100%; } .field.tok { flex: 0 1 200px; } .field.sub { flex: 0 1 160px; }
   .spacer { flex: 1; }
 
   .status { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
@@ -181,6 +181,27 @@
   #toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-3); border: 1px solid var(--red); color: #ffc9c9; padding: 10px 16px; border-radius: 8px; font-size: 12.5px; z-index: 200; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; max-width: 80vw; }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  button.stop { background: linear-gradient(180deg, rgba(255,107,107,.22), rgba(255,107,107,.12)); color: #ff8f8f; border-color: rgba(255,107,107,.5); font-weight: 600; }
+  button.stop:hover { background: rgba(255,107,107,.28); color: #fff; border-color: #ff6b6b; }
+
+  /* AskUserQuestion modal */
+  .qmodal { width: min(580px, 96vw); max-height: 82vh; display: flex; flex-direction: column; }
+  .qmodal .qhead { display: flex; align-items: center; gap: 10px; padding: 13px 18px; background: repeating-linear-gradient(45deg, rgba(99,102,241,.12) 0 12px, rgba(99,102,241,.04) 12px 24px); border-bottom: 1px solid rgba(99,102,241,.35); }
+  .qmodal .qhead .icn { color: var(--violet); font-size: 18px; text-shadow: 0 0 14px rgba(99,102,241,.5); }
+  .qmodal .qhead .h { letter-spacing: .2em; text-transform: uppercase; font-size: 12px; color: #b0aeff; font-weight: 600; }
+  .qmodal .qbody { overflow-y: auto; padding: 16px 18px; flex: 1 1 auto; display: flex; flex-direction: column; gap: 14px; }
+  .qcard { background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 8px; padding: 13px 14px; }
+  .qcard .qtxt { font-size: 13.5px; color: var(--txt); margin-bottom: 10px; font-family: var(--sans); line-height: 1.5; }
+  .qcard .qheader { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--violet); margin-bottom: 6px; }
+  .qopt { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; margin-bottom: 4px; transition: border-color .14s, background .14s; }
+  .qopt:hover { background: rgba(99,102,241,.1); border-color: rgba(99,102,241,.35); }
+  .qopt.selected { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.6); }
+  .qopt input[type=radio], .qopt input[type=checkbox] { margin-top: 2px; accent-color: var(--violet); flex: 0 0 auto; }
+  .qopt .olabel { font-size: 13px; color: var(--txt); font-weight: 500; }
+  .qopt .odesc { font-size: 11.5px; color: var(--dim); margin-top: 2px; line-height: 1.5; }
+  .qmodal .qfoot { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; gap: 10px; }
+  .qmodal .qfoot button { flex: 1; height: 40px; font-size: 13px; }
+
   @media (max-width: 760px) { .field.url, .brand span { display: none; } aside.open { width: 100%; position: absolute; right: 0; top: 0; bottom: 0; z-index: 30; } }
 </style>
 </head>
@@ -190,6 +211,7 @@
     <div class="conn">
       <div class="field url"><label data-i18n="lbl_agent">agent</label><input id="base" spellcheck="false" placeholder="http://host:8765" /></div>
       <div class="field tok"><label data-i18n="lbl_token">token</label><input id="token" type="password" spellcheck="false" placeholder="AGENT_TOKEN" /></div>
+      <div class="field sub"><label data-i18n="lbl_subdir">subdir</label><input id="subdir" spellcheck="false" placeholder="path/to/subdir" /></div>
     </div>
     <div class="spacer"></div>
     <div class="status off" id="status"><span class="dot"></span><span id="statusText">offline</span></div>
@@ -261,6 +283,18 @@
     </div>
   </div>
 
+  <!-- AskUserQuestion overlay -->
+  <div class="overlay" id="questionOverlay">
+    <div class="modal qmodal">
+      <div class="qhead"><span class="icn">◈</span><span class="h" data-i18n="q_h">Questions</span></div>
+      <div class="qbody" id="questionBody"></div>
+      <div class="qfoot">
+        <button class="deny" id="questionSkip" data-i18n="btn_q_skip">SKIP</button>
+        <button class="allow" id="questionSubmit" data-i18n="btn_q_submit">SUBMIT</button>
+      </div>
+    </div>
+  </div>
+
   <!-- file viewer overlay -->
   <div class="overlay" id="viewerOverlay">
     <div class="modal viewer">
@@ -299,7 +333,13 @@
   const I18N = {
     lbl_agent: { en: "agent", zh: "地址" },
     lbl_token: { en: "token", zh: "令牌" },
+    lbl_subdir: { en: "subdir", zh: "子目录" },
     btn_send: { en: "SEND", zh: "发送" },
+    btn_stop: { en: "STOP", zh: "停止" },
+    q_h: { en: "Questions", zh: "需要回答" },
+    btn_q_skip: { en: "SKIP", zh: "跳过" },
+    btn_q_submit: { en: "SUBMIT", zh: "提交" },
+    result_interrupted: { en: "interrupted", zh: "已中断" },
     btn_connect: { en: "CONNECT", zh: "连接" },
     btn_disconnect: { en: "DISCONNECT", zh: "断开" },
     btn_deny: { en: "DENY", zh: "拒绝" },
@@ -363,14 +403,16 @@
     { cmd: "/cost", key: "cmd_cost" }, { cmd: "/init", key: "cmd_init" },
   ];
 
-  const state = { ws: null, sock: null, statusKind: "off", statusKey: "status_offline", sessionId: "", cwd: "", cwdMode: "off", pendingPerm: null, autoscroll: true };
+  const state = { ws: null, sock: null, statusKind: "off", statusKey: "status_offline", sessionId: "", cwd: "", cwdMode: "off", pendingPerm: null, pendingQuestion: null, thinking: false, autoscroll: true };
 
   // ── connection settings ─────────────────────────────────
-  const baseInput = $("#base"), tokenInput = $("#token");
+  const baseInput = $("#base"), tokenInput = $("#token"), subdirInput = $("#subdir");
   baseInput.value = localStorage.getItem("agent.base") || `${location.protocol}//${location.host}`;
   tokenInput.value = localStorage.getItem("agent.token") || "";
+  subdirInput.value = localStorage.getItem("agent.subdir") || "";
   baseInput.addEventListener("change", () => localStorage.setItem("agent.base", baseInput.value.trim()));
   tokenInput.addEventListener("change", () => localStorage.setItem("agent.token", tokenInput.value.trim()));
+  subdirInput.addEventListener("change", () => localStorage.setItem("agent.subdir", subdirInput.value.trim()));
   const httpBase = () => (baseInput.value.trim() || `${location.protocol}//${location.host}`).replace(/\/+$/, "");
   const apiURL = (group, op) => `${httpBase()}/agent/${group}/${op}?token=${encodeURIComponent(tokenInput.value.trim())}`;
 
@@ -421,10 +463,14 @@
   }
   function addToolResults(results) { const m = el("div", "msg"); m.innerHTML = `<div class="tag" data-i18n="tag_output">${t("tag_output")}</div>`; results.forEach((r) => m.appendChild(resultBox(r.content, r.is_error))); append(m); }
   function addResult(ev) {
+    setThinking(false); $("#input").disabled = false;
+    document.querySelectorAll("#cmdbar .cmd").forEach((b) => (b.disabled = !(state.ws && state.ws.readyState === 1)));
     const line = el("div", "endline" + (ev.is_error ? " err" : ""));
     const dur = ev.duration_ms != null ? `${(ev.duration_ms / 1000).toFixed(1)}s` : "";
     const cost = ev.total_cost_usd != null ? `$${Number(ev.total_cost_usd).toFixed(4)}` : "";
-    const bits = [t(ev.is_error ? "result_failed" : "result_complete"), dur, cost].filter(Boolean);
+    const usage = ev.usage ? (() => { const u = ev.usage; const tok = (u.input_tokens || 0) + (u.output_tokens || 0) + (u.cache_read_input_tokens || 0); return tok > 0 ? `${tok} tok` : ""; })() : "";
+    const labelKey = ev.subtype === "interrupted" ? "result_interrupted" : (ev.is_error ? "result_failed" : "result_complete");
+    const bits = [t(labelKey), dur, usage, cost].filter(Boolean);
     line.innerHTML = `<b>◆</b>&nbsp;${esc(bits.join("  ·  "))}`; append(line);
   }
   function addSystem(text, isErr) { const n = el("div", "sysnote" + (isErr ? " err" : "")); n.textContent = text; append(n); }
@@ -434,10 +480,22 @@
     const b = httpBase(); const wsProto = b.startsWith("https") ? "wss" : "ws"; const host = b.replace(/^https?:\/\//, "");
     let u = `${wsProto}://${host}/agent/chat?token=${encodeURIComponent(tokenInput.value.trim())}`;
     if (state.sessionId) u += `&session_id=${encodeURIComponent(state.sessionId)}`;
+    const sub = subdirInput.value.trim();
+    if (sub) u += `&work_subdir=${encodeURIComponent(sub)}`;
     return u;
   }
+  function setThinking(on) {
+    state.thinking = on;
+    const btn = $("#sendBtn");
+    if (on) {
+      btn.textContent = t("btn_stop"); btn.className = "stop"; btn.disabled = false;
+    } else {
+      btn.textContent = t("btn_send"); btn.className = "primary"; btn.disabled = !state.ws;
+    }
+  }
   function setComposerEnabled(on) {
-    $("#input").disabled = !on; $("#sendBtn").disabled = !on;
+    $("#input").disabled = !on || state.thinking;
+    if (!state.thinking) { const btn = $("#sendBtn"); btn.disabled = !on; btn.textContent = t("btn_send"); btn.className = "primary"; }
     document.querySelectorAll("#cmdbar .cmd").forEach((b) => (b.disabled = !on));
   }
   function connect() {
@@ -452,7 +510,7 @@
     sock.onclose = (ev) => {
       if (state.ws !== sock) return;
       state.ws = null; state.sock = null; state.cwdMode = "off"; renderCwd();
-      setStatus("off", "status_offline"); setComposerEnabled(false); closePermission();
+      setStatus("off", "status_offline"); setComposerEnabled(false); closePermission(); closeQuestion();
       if (ev.reason) addSystem(t("sys_session_ended") + ev.reason, false);
     };
   }
@@ -475,6 +533,7 @@
       case "assistant": addAssistant(ev.blocks || []); break;
       case "tool_result": addToolResults(ev.results || []); break;
       case "permission_request": showPermission(ev); break;
+      case "user_question": showQuestion(ev); break;
       case "result": addResult(ev); break;
       case "error": addSystem(t("sys_error") + (ev.msg || "?"), true); break;
       case "closed":
@@ -492,8 +551,16 @@
     text = (text || "").trim();
     if (!text || !state.ws || state.ws.readyState !== 1) return;
     addUser(text); state.ws.send(JSON.stringify({ type: "user_message", text }));
+    setThinking(true); $("#input").disabled = true;
+    document.querySelectorAll("#cmdbar .cmd").forEach((b) => (b.disabled = true));
   }
-  function send() { if (input.disabled) return; const v = input.value; input.value = ""; autosize(); sendText(v); input.focus(); }
+  function send() {
+    if (state.thinking) {
+      if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ type: "interrupt" }));
+      return;
+    }
+    if (input.disabled) return; const v = input.value; input.value = ""; autosize(); sendText(v); input.focus();
+  }
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
   $("#sendBtn").addEventListener("click", send);
   $("#connectBtn").addEventListener("click", () => { state.ws ? disconnect() : connect(); });
@@ -501,7 +568,7 @@
   setInterval(syncConnectBtn, 300);
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); newSession(); }
-    if (e.key === "Escape") { if (state.pendingPerm) respondPermission(false); else { closeViewer(); closeSess(); } }
+    if (e.key === "Escape") { if (state.pendingPerm) respondPermission(false); else if (state.pendingQuestion) respondQuestion(null); else { closeViewer(); closeSess(); } }
   });
 
   // ── command bar ─────────────────────────────────────────
@@ -531,6 +598,71 @@
   }
   $("#permAllow").addEventListener("click", () => respondPermission(true));
   $("#permDeny").addEventListener("click", () => respondPermission(false));
+
+  // ── AskUserQuestion modal ───────────────────────────────
+  function showQuestion(ev) {
+    state.pendingQuestion = ev;
+    const body = $("#questionBody"); body.innerHTML = "";
+    const qs = ev.questions || [];
+    qs.forEach((q, qi) => {
+      const card = el("div", "qcard");
+      const header = q.header ? `<div class="qheader">${esc(q.header)}</div>` : "";
+      card.innerHTML = `${header}<div class="qtxt">${esc(q.question || "")}</div>`;
+      const multi = !!q.multiSelect;
+      (q.options || []).forEach((opt, oi) => {
+        const id = `q${qi}_o${oi}`;
+        const row = el("div", "qopt");
+        row.dataset.qi = qi; row.dataset.val = opt.label;
+        const inp = document.createElement("input");
+        inp.type = multi ? "checkbox" : "radio";
+        inp.name = `q${qi}`; inp.id = id; inp.value = opt.label;
+        const lbl = el("div");
+        lbl.innerHTML = `<div class="olabel">${esc(opt.label)}</div>` + (opt.description ? `<div class="odesc">${esc(opt.description)}</div>` : "");
+        row.appendChild(inp); row.appendChild(lbl);
+        row.addEventListener("click", (e) => {
+          if (e.target === inp) return;
+          inp.checked = multi ? !inp.checked : true;
+          if (!multi) card.querySelectorAll(".qopt").forEach((r) => r.classList.toggle("selected", r === row));
+          else row.classList.toggle("selected", inp.checked);
+        });
+        inp.addEventListener("change", () => {
+          if (!multi) card.querySelectorAll(".qopt").forEach((r) => r.classList.toggle("selected", r === row && inp.checked));
+          else row.classList.toggle("selected", inp.checked);
+        });
+        card.appendChild(row);
+      });
+      body.appendChild(card);
+    });
+    $("#questionOverlay").classList.add("show");
+  }
+  function closeQuestion() { state.pendingQuestion = null; $("#questionOverlay").classList.remove("show"); }
+  function respondQuestion(answers) {
+    const ev = state.pendingQuestion; if (!ev) return;
+    if (!answers) answers = {};
+    if (state.ws && state.ws.readyState === 1) {
+      state.ws.send(JSON.stringify({ type: "question_response", request_id: ev.request_id, answers }));
+    }
+    closeQuestion();
+  }
+  $("#questionSubmit").addEventListener("click", () => {
+    const ev = state.pendingQuestion; if (!ev) return;
+    const answers = {};
+    (ev.questions || []).forEach((q, qi) => {
+      const card = $("#questionBody").children[qi];
+      if (!card) return;
+      const multi = !!q.multiSelect;
+      if (multi) {
+        const checked = [...card.querySelectorAll(`input[name=q${qi}]:checked`)].map((i) => i.value);
+        if (checked.length) answers[q.question] = checked.join(", ");
+      } else {
+        const sel = card.querySelector(`input[name=q${qi}]:checked`);
+        if (sel) answers[q.question] = sel.value;
+      }
+    });
+    respondQuestion(answers);
+  });
+  $("#questionSkip").addEventListener("click", () => respondQuestion({}));
+  $("#questionOverlay").addEventListener("click", (e) => { if (e.target.id === "questionOverlay") respondQuestion({}); });
 
   // ── drawer: tabs ────────────────────────────────────────
   const drawer = $("#drawer");
@@ -654,6 +786,8 @@
     $("#langBtn").textContent = lang === "zh" ? "EN" : "中";
     $("#langBtn").title = lang === "zh" ? "Switch to English" : "切换中文";
     syncConnectBtn(); setStatus(state.statusKind, state.statusKey); renderCwd(); buildCmdBar();
+    if (state.thinking) { const btn = $("#sendBtn"); btn.textContent = t("btn_stop"); }
+    else { const btn = $("#sendBtn"); btn.textContent = t("btn_send"); }
     if (state.pendingPerm) renderPermission(state.pendingPerm);
     if (drawer.classList.contains("open") && activeTab === "sessions") { /* labels only; list refresh optional */ }
   }
