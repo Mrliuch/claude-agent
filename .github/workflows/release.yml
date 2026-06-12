@@ -39,9 +39,9 @@ jobs:
               -ldflags "-s -w -X main.version=${VERSION}" -o "$bin" ./cmd/claude-agent
             base="claude-agent_${VERSION}_${os}_${arch}"
             if [ "$os" = "windows" ]; then
-              zip -q "dist/${base}.zip" "$bin" README.md README.zh-CN.md LICENSE
+              zip -q "dist/${base}.zip" "$bin" README.md README.en.md LICENSE
             else
-              tar -czf "dist/${base}.tar.gz" "$bin" README.md README.zh-CN.md LICENSE
+              tar -czf "dist/${base}.tar.gz" "$bin" README.md README.en.md LICENSE
             fi
             rm -f "$bin"
           done

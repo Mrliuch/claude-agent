@@ -1,103 +1,97 @@
 # claude-agent
 
-**English** · [简体中文](./README.zh-CN.md)
+**简体中文** · [English](./README.en.md)
 
-> A tiny, single-binary agent that lets you drive [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on a **remote machine** from your browser — over WebSocket, with **human-in-the-loop approval** for every dangerous action.
+> 一个单文件、零依赖的小代理：让你在浏览器里远程驱动**目标机**上的 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) —— 基于 WebSocket，且**每一个危险操作都由你在浏览器里点头才执行**。
 
-`claude-agent` runs on a target server, spawns the locally-installed `claude` CLI as a
-subprocess (speaking its `stream-json` bidirectional control protocol), and exposes a
-token-authenticated WebSocket endpoint. It ships with a **zero-dependency web console**
-embedded in the binary, so you can point a browser at it and start working immediately.
+`claude-agent` 跑在目标服务器上，以子进程方式拉起本机已安装的 `claude` CLI（说它的
+`stream-json` 双向控制协议），对外暴露一个带共享 token 鉴权的 WebSocket 端点。它把一个
+**零依赖 Web 控制台**直接编进了二进制，所以浏览器一指就能用。
 
 ```
-  Browser ──WS──> claude-agent (target host) ──subprocess──> claude code CLI
-   web console        token auth                              runs on the box itself
+  浏览器 ──WS──> claude-agent（目标机）──子进程──> claude code CLI
+   Web 控制台       token 鉴权                       在这台机器上干活
 ```
 
-No API keys live in the agent. Credentials, model selection, and any third-party gateway
-config are entirely owned by the `claude` CLI on the target machine — the agent just drives it.
+代理本身**不持有任何 API Key**。凭证、模型选择、第三方中转配置全部归目标机上的 `claude`
+CLI 自己管 —— 代理只负责驱动它。
 
-![claude-agent web console](./docs/en-chat.png)
-<p align="center"><em>The built-in console — chat, native command bar, tool cards, and human-in-the-loop approval.</em></p>
+![claude-agent Web 控制台](./docs/zh-chat.png)
+<p align="center"><em>内置控制台 —— 对话、原生命令栏、工具卡片，以及人在回路的授权确认。</em></p>
 
 ---
 
-## Why
+## 为什么需要它
 
-Sometimes the box you need Claude Code to work on isn't the box in front of you: a
-production server, a build host, a VM behind a bastion. `claude-agent` gives that box a
-thin, auditable remote-control surface:
+有时候需要 Claude Code 干活的机器，并不是你面前这台：生产服务器、构建机、堡垒机后面的
+VM。`claude-agent` 给那台机器一个轻量、可审计的远程操控面：
 
-- **Single static binary**, zero runtime dependencies — drop it on the host and run.
-- **Embedded web console** — no separate frontend to build or host.
-- **Permission prompts surface in your browser.** The agent runs `claude` with
-  `--permission-mode default`, so every privileged tool call (Bash, file writes, …) is
-  forwarded to you as a `permission_request` and only executes after you click **Allow**.
-- **Fenced file manager** — browse / view / download / upload within the working
-  directory, with strict path-jail (no `..` escape, no symlink escape).
-- **Embeddable** — the same WebSocket endpoint can sit behind your own auth-relay backend
-  if you'd rather not expose the agent directly.
+- **单个静态二进制**，零运行时依赖 —— 丢上去就能跑。
+- **内置 Web 控制台** —— 不用单独构建或托管前端。
+- **权限确认弹回你的浏览器。** 代理以 `--permission-mode default` 运行 `claude`，所以每个
+  特权工具调用（Bash、写文件……）都会作为 `permission_request` 转发给你，**点了允许才执行**。
+- **带围栏的文件管理** —— 在工作目录内浏览 / 查看 / 下载 / 上传，严格路径围栏（`..` 越界、
+  软链逃逸都拦死）。
+- **可嵌入** —— 同一个 WebSocket 端点也能藏在你自己的鉴权中继后端之后，不必直接暴露代理。
 
 ---
 
-## Quick start
+## 快速开始
 
-### 1. Prerequisites
+### 1. 前置条件
 
-On the **target machine**:
+在**目标机**上：
 
-- The `claude` CLI is installed and **works when run manually by the same user** that will
-  run the agent (i.e. `claude` can already authenticate and hold a conversation). The agent
-  inherits whatever credentials/config that user's `claude` already has.
-- Go 1.25+ (only if you build from source).
+- `claude` CLI 已安装，且**用运行代理的同一个用户手动执行 `claude` 能正常对话**（即 `claude`
+  已经能认证、能聊天）。代理沿用该用户 `claude` 已有的全部凭证/配置。
+- Go 1.25+（仅从源码构建时需要）。
 
-### 2. Build & run
+### 2. 构建并运行
 
 ```bash
 git clone https://github.com/Mrliuch/claude-agent.git
 cd claude-agent
 go build -o claude-agent .
 
-# pick a long random shared token
+# 生成一个足够长的随机共享 token
 AGENT_TOKEN=$(openssl rand -hex 24) ./claude-agent
 ```
 
-Then open `http://<host>:8765/` in a browser, paste the same token, and hit **Connect**.
+然后浏览器打开 `http://<host>:8765/`，粘贴同一个 token，点 **CONNECT/连接**。
 
-> The web console is served at `/` from the same origin, so there are no CORS hoops. The
-> token you paste in the browser is **not** baked into the served HTML.
-
----
-
-## Configuration
-
-All configuration is via environment variables.
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `AGENT_TOKEN` | **Required.** Shared auth token; clients must present it. | — |
-| `AGENT_LISTEN_ADDR` | Listen address. | `:8765` |
-| `AGENT_UI` | Set to `off` to disable the built-in web console at `/`. | `on` |
-| `CLAUDE_BIN` | Path/command for the Claude Code CLI. | `claude` |
-| `CLAUDE_MODEL` | Model to pass to `claude`; empty = CLI default. | _(empty)_ |
-| `CLAUDE_WORK_DIR` | Working directory for `claude` (and the file-manager jail root). Empty = the run user's `$HOME`. | _(empty)_ |
-| `CLAUDE_PERMISSION_MODE` | Passed to `claude --permission-mode`. Keep `default` so dangerous ops prompt. | `default` |
-| `CLAUDE_IDLE_TIMEOUT` | Seconds of inactivity before the session (and the `claude` child process) is reaped. `0` = disabled. | `1800` |
-| `AGENT_DEBUG` | Set to any value to log raw bridge traffic. | _(empty)_ |
-
-> ⚠️ **Never** set `CLAUDE_PERMISSION_MODE` to anything that bypasses prompts on a host you
-> care about. The whole point is that *you* approve each action.
+> Web 控制台从同源的 `/` 提供，没有 CORS 障碍。你在浏览器里粘贴的 token **不会**被写进下发的
+> HTML。
 
 ---
 
-## Deployment
+## 配置
 
-### Option A — Run the binary directly (recommended)
+全部通过环境变量配置。
 
-Running on the host directly means `claude` can see the **real host filesystem** — best for
-actually troubleshooting that machine.
+| 变量 | 说明 | 默认 |
+|------|------|------|
+| `AGENT_TOKEN` | **必填。** 共享鉴权 token，客户端需携带。 | — |
+| `AGENT_LISTEN_ADDR` | 监听地址。 | `:8765` |
+| `AGENT_UI` | 设为 `off` 关闭 `/` 上的内置 Web 控制台。 | `on` |
+| `CLAUDE_BIN` | Claude Code CLI 的路径/命令。 | `claude` |
+| `CLAUDE_MODEL` | 传给 `claude` 的模型；留空用 CLI 默认。 | _(空)_ |
+| `CLAUDE_WORK_DIR` | `claude` 的工作目录（也是文件管理围栏根）。留空回退到运行用户的 `$HOME`。 | _(空)_ |
+| `CLAUDE_PERMISSION_MODE` | 传给 `claude --permission-mode`。保持 `default` 才会弹窗确认危险操作。 | `default` |
+| `CLAUDE_IDLE_TIMEOUT` | 空闲多少秒后回收会话（及 `claude` 子进程）。`0` = 禁用。 | `1800` |
+| `AGENT_DEBUG` | 设为任意值则打印原始桥接流量日志。 | _(空)_ |
 
-`/etc/systemd/system/claude-agent.service`:
+> ⚠️ 在你在意的机器上，**绝不要**把 `CLAUDE_PERMISSION_MODE` 设成任何会绕过弹窗的值。整个设计
+> 的意义就是 *你* 来批准每一步。
+
+---
+
+## 部署
+
+### 方式一：直接跑二进制（推荐）
+
+直接在宿主机上跑，`claude` 才能看到**真实的宿主机文件系统** —— 排查这台机器的问题最合适。
+
+`/etc/systemd/system/claude-agent.service`：
 
 ```ini
 [Unit]
@@ -106,7 +100,7 @@ After=network.target
 
 [Service]
 User=ops
-Environment=AGENT_TOKEN=<your-random-token>
+Environment=AGENT_TOKEN=<你的随机token>
 Environment=AGENT_LISTEN_ADDR=:8765
 Environment=CLAUDE_WORK_DIR=/home/ops
 ExecStart=/usr/local/bin/claude-agent
@@ -120,177 +114,169 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload && sudo systemctl enable --now claude-agent
 ```
 
-### Option B — Docker
+### 方式二：Docker
 
-The provided `Dockerfile` builds the agent and bundles Node + the Claude Code CLI.
+仓库自带的 `Dockerfile` 会构建代理并内置 Node + Claude Code CLI。
 
 ```bash
 docker build -t claude-agent .
 docker run -d --name claude-agent -p 8765:8765 \
-  -e AGENT_TOKEN=<your-random-token> \
+  -e AGENT_TOKEN=<你的随机token> \
   claude-agent
 ```
 
-> ⚠️ Inside a container, `claude` only sees the **container's** filesystem. To work on the
-> host, prefer Option A, or mount host paths / use `--network host` and grant access
-> deliberately.
+> ⚠️ 容器内的 `claude` 只能看到**容器内部**的文件系统。要排查宿主机，请用方式一，或挂载宿主机
+> 目录 / 用 `--network host` 并按需提权。
 
 ---
 
-## Security model
+## 安全模型
 
-`claude-agent` gives a browser the ability to run commands on a machine. Treat the token
-like a production credential and lock the surface down:
+`claude-agent` 让浏览器拥有在一台机器上执行命令的能力。请把 token 当成生产凭证，并把暴露面收紧：
 
-- **Firewall the port.** Only allow the networks/hosts that should reach it.
-- **The token rides in the query string** (WebSocket can't carry custom headers easily).
-  Put TLS in front for anything beyond a trusted LAN/VPN — terminate `wss://` at a reverse
-  proxy, or tunnel over SSH/VPN.
-- **Approval is mandatory by design.** With `--permission-mode default`, no privileged tool
-  runs until you allow it in the browser. Deny is always one click away (or `Esc`).
-- **The file manager is path-jailed** to `CLAUDE_WORK_DIR`: lexical `..` is neutralized and
-  symlinks are resolved and re-checked against the jail root before any read/write.
-- **Disable the console** with `AGENT_UI=off` if you only want to drive the agent from your
-  own backend relay.
+- **用防火墙限制端口。** 只放通应该能访问它的网络/主机。
+- **token 走 query 参数**（WebSocket 不便带自定义 header）。超出可信内网/VPN 范围请在前面套
+  TLS —— 用反向代理终结 `wss://`，或经 SSH/VPN 隧道访问。
+- **批准是设计上强制的。** `--permission-mode default` 下，没有你的允许，任何特权工具都不会跑。
+  拒绝永远是一键（或按 `Esc`）。
+- **文件管理被围栏在** `CLAUDE_WORK_DIR`：词法上中和 `..`，软链解析后再校验是否仍在围栏根内，
+  之后才允许读写。
+- **关掉控制台** 用 `AGENT_UI=off`，适合只想从自己的后端中继驱动代理的场景。
 
 ---
 
-## Web console
+## Web 控制台
 
-Served at `/` (unless `AGENT_UI=off`). It's a single self-contained HTML file embedded in
-the binary — no build step, no external fonts or CDNs, works offline.
+从 `/` 提供（除非 `AGENT_UI=off`）。它是一个编进二进制的零依赖单文件 HTML —— 无构建步骤、无
+外部字体或 CDN、可离线运行。
 
-- **Chat** with the remote Claude: streamed assistant text, tool-use cards, and tool output.
-- **Native command bar** — one click sends `/clear`, `/compact`, `/context`, `/usage`,
-  `/cost`, or `/init` straight to Claude (these run over the same `stream-json` channel).
-- **Authorization overlay** for every `permission_request` — see the exact tool + input
-  before allowing/denying.
-- **Files drawer** — browse the working directory, view text files, download, all jailed.
-- **History sessions** — see the current directory's past Claude sessions, read any
-  transcript, and **resume** one to continue with full context (`--resume`).
-- **Session continuity** — the console remembers the `session_id` and reconnects with
-  `--resume`; `⌘/Ctrl+K` starts a fresh session.
-- **Bilingual UI** — one-click English ⇄ 中文 toggle in the top-right (remembers your choice).
+- **对话** 远程 Claude：流式助手文本、工具调用卡片、工具输出。
+- **原生命令栏** —— 一键把 `/clear`、`/compact`、`/context`、`/usage`、`/cost`、`/init`
+  直接发给 Claude（走同一条 `stream-json` 通道）。
+- **授权弹窗** 对每个 `permission_request` —— 允许/拒绝前先看清确切的工具 + 入参。
+- **文件抽屉** —— 浏览工作目录、查看文本文件、下载，全程围栏。
+- **历史会话** —— 查看当前目录的过往 Claude 会话、回看任意会话内容，并可**一键续接**
+  恢复上下文继续聊（`--resume`）。
+- **会话续接** —— 控制台记住 `session_id` 并以 `--resume` 重连；`⌘/Ctrl+K` 开启新会话。
+- **中英双语** —— 右上角一键切换界面语言（记忆选择）。
 
-Every dangerous action stops for your approval:
+每个危险操作都会停下来等你授权：
 
-![Authorization overlay](./docs/en-permission.png)
+![授权弹窗](./docs/zh-permission.png)
 
-Browse and resume the working directory's Claude history:
+浏览并续接当前工作目录的 Claude 历史会话：
 
-![History sessions](./docs/en-sessions.png)
+![历史会话](./docs/zh-sessions.png)
 
 ---
 
-## Using it behind your own backend (relay mode)
+## 藏在你自己的后端之后（中继模式）
 
-The WebSocket endpoint is transport-agnostic: any backend can authenticate its own users
-however it likes, then **transparently relay frames** to `claude-agent`. The agent stays a
-dumb, token-gated executor; your backend never needs an API key. Set `AGENT_UI=off` and the
-agent becomes purely a protocol endpoint.
+这个 WebSocket 端点与传输无关：任何后端都可以用自己喜欢的方式鉴权自己的用户，然后**透明地把帧
+中继**给 `claude-agent`。代理始终是一个只认 token 的"哑"执行器，你的后端永远不需要 API Key。
+设 `AGENT_UI=off`，代理就退化成纯协议端点。
 
 ---
 
-## Protocol reference
+## 协议参考
 
-WebSocket: `GET /agent/chat?token=<AGENT_TOKEN>[&session_id=<id>]`
-Health check: `GET /healthz` → `{"status":"ok"}`
+WebSocket：`GET /agent/chat?token=<AGENT_TOKEN>[&session_id=<id>]`
+健康检查：`GET /healthz` → `{"status":"ok"}`
 
-**Client → server**
+**客户端 → 服务端**
 
 ```jsonc
-{ "type": "user_message", "text": "check disk usage" }
-{ "type": "user_message", "text": "/context" }   // native slash commands work too
+{ "type": "user_message", "text": "看看磁盘占用" }
+{ "type": "user_message", "text": "/context" }   // 原生斜杠命令同样可用
 { "type": "permission_response", "request_id": "...", "allow": true, "tool_input": { } }
 { "type": "close" }
 ```
 
-> Native Claude slash commands (`/clear`, `/compact`, `/context`, `/usage`, `/cost`,
-> `/init`, …) are just user messages whose text starts with `/` — Claude interprets them
-> over the same `stream-json` channel, so the console's command bar simply sends them.
+> Claude 原生斜杠命令（`/clear`、`/compact`、`/context`、`/usage`、`/cost`、`/init` 等）
+> 本质上就是「文本以 `/` 开头的用户消息」—— Claude 会在同一条 `stream-json` 通道里解释它们，
+> 所以控制台的命令栏只是把它们发出去而已。
 
-**Server → client**
+**服务端 → 客户端**
 
-| `type` | Meaning |
-|--------|---------|
-| `ready` | Session is up. Carries `cwd`, `session_id`. |
-| `assistant` | `blocks[]` of `{kind:"text"}` / `{kind:"tool_use", name, input}`. |
-| `tool_result` | `results[]` of `{content, is_error}`. |
-| `permission_request` | `request_id`, `tool_name`, `tool_input`, `title`, `description`. |
-| `result` | Turn summary: `subtype`, `is_error`, `duration_ms`, `total_cost_usd`, `result`. |
-| `error` | `{msg}`. |
-| `closed` | `claude` exited; `stderr` tail included. |
+| `type` | 含义 |
+|--------|------|
+| `ready` | 会话就绪。携带 `cwd`、`session_id`。 |
+| `assistant` | `blocks[]`，元素为 `{kind:"text"}` / `{kind:"tool_use", name, input}`。 |
+| `tool_result` | `results[]`，元素为 `{content, is_error}`。 |
+| `permission_request` | `request_id`、`tool_name`、`tool_input`、`title`、`description`。 |
+| `result` | 本轮汇总：`subtype`、`is_error`、`duration_ms`、`total_cost_usd`、`result`。 |
+| `error` | `{msg}`。 |
+| `closed` | `claude` 退出；含 `stderr` 尾部。 |
 
-### File-manager HTTP API
+### 文件管理 HTTP API
 
-All require `?token=<AGENT_TOKEN>`; all paths are relative to and jailed within
-`CLAUDE_WORK_DIR`. Responses use the envelope `{code, msg, data}` (`code:0` = ok).
+全部需要 `?token=<AGENT_TOKEN>`；所有路径相对并围栏于 `CLAUDE_WORK_DIR`。响应统一用信封
+`{code, msg, data}`（`code:0` = 成功）。
 
-| Method & path | Purpose |
-|---------------|---------|
-| `GET  /agent/fs/list?path=` | List a directory. |
-| `GET  /agent/fs/read?path=` | Read a text file (≤1 MB, truncates). |
-| `GET  /agent/fs/tree` | Recursive relative paths (skips `.git`, `node_modules`, …). |
-| `GET  /agent/fs/download?path=` | Stream any file. |
-| `POST /agent/fs/write` | `{path, content}`. |
-| `POST /agent/fs/upload` | `{path, content_b64}` (≤50 MB). |
-| `POST /agent/fs/mkdir` | `{path}`. |
-| `DELETE /agent/fs/delete?path=` | Remove (cannot delete the jail root). |
+| 方法与路径 | 用途 |
+|-----------|------|
+| `GET  /agent/fs/list?path=` | 列目录。 |
+| `GET  /agent/fs/read?path=` | 读文本文件（≤1 MB，超出截断）。 |
+| `GET  /agent/fs/tree` | 递归相对路径（跳过 `.git`、`node_modules` 等）。 |
+| `GET  /agent/fs/download?path=` | 流式下载任意文件。 |
+| `POST /agent/fs/write` | `{path, content}`。 |
+| `POST /agent/fs/upload` | `{path, content_b64}`（≤50 MB）。 |
+| `POST /agent/fs/mkdir` | `{path}`。 |
+| `DELETE /agent/fs/delete?path=` | 删除（不能删围栏根本身）。 |
 
-### Session-history HTTP API
+### 历史会话 HTTP API
 
-Read-only access to the **current working directory's** Claude session history (stored by
-the CLI under `~/.claude/projects/<slug>/<id>.jsonl`). Token-gated; same `{code, msg, data}`
-envelope.
+只读访问**当前工作目录**的 Claude 会话历史（CLI 存放在
+`~/.claude/projects/<slug>/<id>.jsonl`）。需 token；同样使用 `{code, msg, data}` 信封。
 
-| Method & path | Purpose |
-|---------------|---------|
-| `GET /agent/sessions/list` | List this directory's sessions (`id`, `title`, `messages`, `mtime`, `size`) plus its `cwd`. |
-| `GET /agent/sessions/read?id=<uuid>` | Parse a session into a read-only transcript (`items[]` of `{role, blocks, ts}`). |
+| 方法与路径 | 用途 |
+|-----------|------|
+| `GET /agent/sessions/list` | 列出当前目录的会话（`id`、`title`、`messages`、`mtime`、`size`）及其 `cwd`。 |
+| `GET /agent/sessions/read?id=<uuid>` | 把一个会话解析成只读回看记录（`items[]`，元素为 `{role, blocks, ts}`）。 |
 
-To **resume** a session, just open a chat WebSocket with `&session_id=<id>` — Claude
-reattaches with `--resume` and the prior context.
+要**续接**某个会话，只需用 `&session_id=<id>` 打开对话 WebSocket —— Claude 会以 `--resume`
+重新挂接并恢复此前上下文。
 
 ---
 
-## Development
+## 开发
 
 ```bash
 go vet ./...
-go test ./...     # includes an end-to-end test against a fake claude (zero API cost)
+go test ./...     # 含针对假 claude 的端到端测试（零 API 成本）
 go build -o claude-agent .
 ```
 
-The test suite uses `cmd/fakeclaude`, a stub that speaks the `stream-json` control protocol,
-so the full bridge + WebSocket + permission roundtrip is exercised without calling the real
-Claude API. `cmd/smoke` is a one-shot client for verifying a live deployment:
+测试套件用 `cmd/fakeclaude` —— 一个会说 `stream-json` 控制协议的桩，因此完整的 桥接 +
+WebSocket + 权限往返链路都被覆盖，且不调用真实 Claude API。`cmd/smoke` 是用来验证线上部署的
+一次性客户端：
 
 ```bash
 go build -o smoke ./cmd/smoke
-./smoke ws://<host>:8765/agent/chat <AGENT_TOKEN> "reply with: hello"
+./smoke ws://<host>:8765/agent/chat <AGENT_TOKEN> "只回复：你好"
 ```
 
-### Project layout
+### 项目结构
 
 ```
-main.go        entrypoint
-config.go      env-driven config
-server.go      HTTP/WebSocket routes, heartbeat, idle reaping
-bridge.go      drives the claude CLI subprocess (stream-json)
-protocol.go    translates claude messages → browser-friendly events
-fs.go          path-jailed file-manager endpoints
-sessions.go    read-only Claude session history (list + transcript)
-web.go         embeds & serves the console
-web/index.html the zero-dependency web console
-cmd/fakeclaude a stub claude for tests
-cmd/smoke      a one-shot deployment smoke client
+main.go        入口
+config.go      环境变量配置
+server.go      HTTP/WebSocket 路由、心跳、空闲回收
+bridge.go      驱动 claude CLI 子进程（stream-json）
+protocol.go    把 claude 消息翻译成前端友好的事件
+fs.go          带路径围栏的文件管理端点
+sessions.go    只读的 Claude 会话历史（列表 + 回看）
+web.go         嵌入并托管控制台
+web/index.html 零依赖 Web 控制台
+cmd/fakeclaude 测试用的假 claude
+cmd/smoke      一次性部署烟雾测试客户端
 ```
 
 ---
 
-## License
+## 许可证
 
 [MIT](./LICENSE)
 
-> This project drives the Claude Code CLI but is not affiliated with or endorsed by Anthropic.
-> "Claude" and "Claude Code" are trademarks of Anthropic.
+> 本项目驱动 Claude Code CLI，但与 Anthropic 无关联、未获其背书。"Claude" 与 "Claude Code"
+> 是 Anthropic 的商标。
