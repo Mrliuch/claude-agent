@@ -21,7 +21,7 @@ func TestGetBotQRCodeAndStatus(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/ilink/bot/get_bot_qrcode"):
-			_ = json.NewEncoder(w).Encode(qrCodeResp{QRCode: "wxp://x", Key: "k1"})
+			_ = json.NewEncoder(w).Encode(qrCodeResp{QRCode: "k1", QRCodeImgContent: "https://liteapp/q/x?qrcode=k1"})
 		case strings.HasPrefix(r.URL.Path, "/ilink/bot/get_qrcode_status"):
 			if r.URL.Query().Get("qrcode") != "k1" {
 				t.Errorf("qrcode param=%q", r.URL.Query().Get("qrcode"))
@@ -33,11 +33,14 @@ func TestGetBotQRCodeAndStatus(t *testing.T) {
 
 	c := NewClient(srv.URL)
 	qr, err := c.GetBotQRCode(context.Background())
-	if err != nil || qr.Key != "k1" {
+	if err != nil || qr.pollKey() != "k1" {
 		t.Fatalf("GetBotQRCode err=%v qr=%+v", err, qr)
 	}
-	st, err := c.GetQRCodeStatus(context.Background(), qr.Key)
-	if err != nil || st.BotToken != "tok-abc" {
+	if qr.scanContent() != "https://liteapp/q/x?qrcode=k1" {
+		t.Errorf("scanContent=%q", qr.scanContent())
+	}
+	st, err := c.GetQRCodeStatus(context.Background(), qr.pollKey())
+	if err != nil || !st.confirmed() || st.token() != "tok-abc" {
 		t.Fatalf("GetQRCodeStatus err=%v st=%+v", err, st)
 	}
 }
@@ -60,7 +63,7 @@ func TestReloginScanFlow(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/ilink/bot/get_bot_qrcode"):
-			_ = json.NewEncoder(w).Encode(qrCodeResp{QRCode: "wxp://login", Key: "key-9"})
+			_ = json.NewEncoder(w).Encode(qrCodeResp{QRCode: "key-9", QRCodeImgContent: "https://liteapp/q/login"})
 		case strings.HasPrefix(r.URL.Path, "/ilink/bot/get_qrcode_status"):
 			_ = json.NewEncoder(w).Encode(qrStatusResp{Status: "confirmed", BotToken: "fresh-tok"})
 		}
@@ -82,7 +85,7 @@ func TestReloginScanFlow(t *testing.T) {
 
 func TestReloginCtxCancel(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(qrCodeResp{QRCode: "wxp://x", Key: "k"})
+		_ = json.NewEncoder(w).Encode(qrCodeResp{QRCode: "k", QRCodeImgContent: "https://liteapp/q/x"})
 	}))
 	defer srv.Close()
 	ctx, cancel := context.WithCancel(context.Background())

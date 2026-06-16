@@ -83,16 +83,57 @@ type sendTypingReq struct {
 	Status       int    `json:"status"`
 }
 
-// qrCodeResp 扫码登录第一步返回:二维码内容(待渲染)+ 轮询用的 key。
+// qrCodeResp 扫码登录第一步返回。真实字段(已抓包核实):
+//
+//	qrcode             轮询 get_qrcode_status 用的 key
+//	qrcode_img_content 真正给微信扫描的 URL(https://liteapp.weixin.qq.com/q/...)
 type qrCodeResp struct {
-	QRCode string `json:"qrcode"`
-	URL    string `json:"url"`
-	Key    string `json:"key"`
+	QRCode           string `json:"qrcode"`
+	QRCodeImgContent string `json:"qrcode_img_content"`
+	URL              string `json:"url"`
+	Ret              int    `json:"ret"`
 }
 
-// qrStatusResp 扫码状态轮询返回;status=confirmed 时带回 bot_token。
+// scanContent 返回应编进二维码、供微信扫描的内容(优先 img_content)。
+func (q qrCodeResp) scanContent() string {
+	if q.QRCodeImgContent != "" {
+		return q.QRCodeImgContent
+	}
+	if q.URL != "" {
+		return q.URL
+	}
+	return q.QRCode
+}
+
+// pollKey 返回轮询扫码状态用的 key。
+func (q qrCodeResp) pollKey() string { return q.QRCode }
+
+// qrStatusResp 扫码状态轮询返回。真实字段:{"ret":0,"status":"wait"};
+// 确认后带回 token(字段名以拿到 token 为准,兼容多种命名)。
 type qrStatusResp struct {
+	Ret      int    `json:"ret"`
 	Status   string `json:"status"`
 	BotToken string `json:"bot_token"`
+	Token    string `json:"token"`
 	BaseURL  string `json:"baseurl"`
+	BaseURL2 string `json:"base_url"`
 }
+
+// token 返回 bot_token(兼容 bot_token / token)。
+func (s qrStatusResp) token() string {
+	if s.BotToken != "" {
+		return s.BotToken
+	}
+	return s.Token
+}
+
+// baseURL 返回接入域名(兼容 baseurl / base_url)。
+func (s qrStatusResp) baseURL() string {
+	if s.BaseURL != "" {
+		return s.BaseURL
+	}
+	return s.BaseURL2
+}
+
+// confirmed 以是否拿到 token 判定扫码确认完成(比依赖 status 字符串更稳)。
+func (s qrStatusResp) confirmed() bool { return s.token() != "" }

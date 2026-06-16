@@ -111,17 +111,18 @@ func (c *Channel) relogin(ctx context.Context) error {
 		if !sleepCtx(ctx, qrPollInterval) {
 			return ctx.Err()
 		}
-		st, err := c.client.GetQRCodeStatus(ctx, qr.Key)
+		st, err := c.client.GetQRCodeStatus(ctx, qr.pollKey())
 		if err != nil {
 			log.Printf("[wechat] 查询扫码状态出错: %v", err)
 			continue
 		}
-		if st.Status == "confirmed" && st.BotToken != "" {
-			if st.BaseURL != "" {
-				c.client = NewClient(st.BaseURL)
+		if st.confirmed() {
+			token := st.token()
+			if st.baseURL() != "" {
+				c.client = NewClient(st.baseURL())
 			}
-			c.client.SetToken(st.BotToken)
-			if err := saveToken(c.tokenPath, st.BotToken); err != nil {
+			c.client.SetToken(token)
+			if err := saveToken(c.tokenPath, token); err != nil {
 				log.Printf("[wechat] 保存 token 失败(不影响本次运行): %v", err)
 			}
 			return nil

@@ -10,10 +10,7 @@ import (
 // printQRCode 在终端渲染登录二维码,供用户用微信扫码授权。
 // 优先渲染二维码内容(qr.QRCode),回退到 URL;两者都打印明文便于排查。
 func printQRCode(qr qrCodeResp) {
-	content := qr.QRCode
-	if content == "" {
-		content = qr.URL
-	}
+	content := qr.scanContent()
 	if content == "" {
 		log.Printf("[wechat] 未获取到二维码内容，无法登录")
 		return
@@ -26,5 +23,6 @@ func printQRCode(qr qrCodeResp) {
 		WhiteChar: qrterminal.WHITE,
 		QuietZone: 1,
 	})
-	log.Printf("[wechat] 如终端无法显示，可手动打开二维码内容: %s", content)
+	// 后台/journald 场景下 ASCII 二维码会被日志前缀打乱;同时给出可手动生成二维码或手机直接打开的 URL。
+	log.Printf("[wechat] 扫码登录链接(手机打开或据此生成二维码): %s", content)
 }
