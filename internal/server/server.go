@@ -14,7 +14,11 @@ import (
 	"claude-agent/internal/bridge"
 	"claude-agent/internal/config"
 	"claude-agent/internal/protocol"
+	"claude-agent/internal/wechat"
 )
+
+// authCookie 是页面认证用的 cookie 名(复用 AGENT_TOKEN)。
+const authCookie = "agent_token"
 
 const (
 	pongWait   = 60 * time.Second
@@ -30,7 +34,8 @@ var upgrader = websocket.Upgrader{
 
 // Server 持有配置，提供 HTTP/WebSocket 路由。
 type Server struct {
-	cfg config.Config
+	cfg    config.Config
+	wechat *wechat.Manager // 可空:未启用微信通道时为 nil
 }
 
 func NewServer(cfg config.Config) *Server {
@@ -52,6 +57,10 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/agent/fs/upload", s.handleFsUpload)
 	mux.HandleFunc("/agent/sessions/list", s.handleSessionsList)
 	mux.HandleFunc("/agent/sessions/read", s.handleSessionRead)
+	mux.HandleFunc("/agent/login", s.handleLogin)
+	mux.HandleFunc("/agent/logout", s.handleLogout)
+	mux.HandleFunc("/agent/wechat/accounts", s.handleWeChatAccounts)
+	mux.HandleFunc("/agent/wechat/qr", s.handleWeChatQR)
 	if s.cfg.UIEnabled {
 		mux.HandleFunc("/", s.handleUI)
 	}
@@ -77,9 +86,46 @@ func (s *Server) resolveWorkSubdir(sub string) string {
 	return target
 }
 
-// authed 校验共享 token（query 参数）。
+// authed 校验共享 token：接受 query 参数或认证 cookie（页面登录后种下）。
 func (s *Server) authed(r *http.Request) bool {
-	return s.cfg.Token != "" && r.URL.Query().Get("token") == s.cfg.Token
+	if s.cfg.Token == "" {
+		return false
+	}
+	if r.URL.Query().Get("token") == s.cfg.Token {
+		return true
+	}
+	if c, err := r.Cookie(authCookie); err == nil && c.Value == s.cfg.Token {
+		return true
+	}
+	return false
+}
+
+// handleLogin 校验 token 并种下认证 cookie（页面认证,复用 AGENT_TOKEN）。
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, 405, "method not allowed", nil)
+		return
+	}
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	if token == "" || token != s.cfg.Token {
+		writeJSON(w, 401, "token 无效", nil)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     authCookie,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   7 * 24 * 3600,
+	})
+	writeJSON(w, 0, "ok", nil)
+}
+
+// handleLogout 清除认证 cookie。
+func (s *Server) handleLogout(w http.ResponseWriter, _ *http.Request) {
+	http.SetCookie(w, &http.Cookie{Name: authCookie, Value: "", Path: "/", MaxAge: -1})
+	writeJSON(w, 0, "ok", nil)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {

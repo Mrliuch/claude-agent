@@ -221,6 +221,8 @@
     <button class="primary" id="connectBtn">CONNECT</button>
     <button class="iconbtn ghost" id="langBtn" title="Language">中</button>
     <button class="iconbtn ghost" id="filesBtn" data-i18n-title="t_panel" title="文件 / 会话">▤</button>
+    <button class="iconbtn ghost" id="wechatBtn" title="微信账号">📱</button>
+    <button class="iconbtn ghost" id="logoutBtn" title="退出登录">⏻</button>
   </header>
 
   <div class="body">
@@ -323,6 +325,27 @@
         <button class="iconbtn ghost" id="sessVClose" title="close">✕</button>
       </div>
       <div class="vbody"><div class="transcript" id="sessBody"></div></div>
+    </div>
+  </div>
+
+  <!-- WeChat accounts overlay -->
+  <div class="overlay" id="wechatOverlay">
+    <div class="modal viewer">
+      <div class="vhead">
+        <span class="vn">微信账号 · ClawBot</span>
+        <button class="iconbtn ghost" id="wechatAdd" title="添加账号">＋</button>
+        <button class="iconbtn ghost" id="wechatRefresh" title="刷新">↻</button>
+        <button class="iconbtn ghost" id="wechatClose" title="close">✕</button>
+      </div>
+      <div class="vbody">
+        <div id="wechatList" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div id="wechatQR" style="display:none;text-align:center;padding:16px 0">
+          <div style="font-size:13px;color:#9aa3b6;margin-bottom:10px">用微信「扫一扫」登录新账号(过期自动刷新)</div>
+          <img id="wechatQRImg" alt="QR" style="width:220px;height:220px;background:#fff;border-radius:10px;padding:8px" />
+          <div id="wechatQRStatus" style="font-size:12px;color:#8b93a7;margin-top:10px">等待扫码…</div>
+          <button class="deny" id="wechatQRCancel" style="margin-top:12px">取消</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -901,6 +924,91 @@
   $("#langBtn").addEventListener("click", () => { lang = lang === "zh" ? "en" : "zh"; localStorage.setItem("agent.lang", lang); applyLang(); });
 
   window.addEventListener("beforeunload", () => { if (state.sock) { try { state.sock.send(JSON.stringify({ type: "close" })); state.sock.close(); } catch {} } });
+
+  // ── WeChat accounts ─────────────────────────────────────
+  const wxTok = () => encodeURIComponent(tokenInput.value.trim());
+  let wxPollTimer = null, wxQRTimer = null, wxQRId = null;
+
+  async function wxApi(method, path, qs) {
+    const u = `/agent/wechat/${path}?token=${wxTok()}${qs ? "&" + qs : ""}`;
+    const r = await fetch(u, { method });
+    const j = await r.json().catch(() => ({ code: -1, msg: "bad response" }));
+    if (j.code !== 0) throw new Error(j.msg || "error");
+    return j.data;
+  }
+
+  function wxStatusBadge(s) {
+    const map = { online: ["在线", "#37d67a"], pending: ["待扫码", "#f0b429"], offline: ["离线", "#8b93a7"] };
+    const [txt, col] = map[s] || ["未知", "#8b93a7"];
+    return `<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:${col}22;color:${col};border:1px solid ${col}55">${txt}</span>`;
+  }
+
+  async function wxLoadList() {
+    const box = $("#wechatList");
+    try {
+      const d = await wxApi("GET", "accounts");
+      const accts = (d && d.accounts) || [];
+      if (!accts.length) { box.innerHTML = `<div style="color:#8b93a7;font-size:13px;padding:8px">还没有账号。点右上角 ＋ 添加并扫码登录。</div>`; return; }
+      box.innerHTML = accts.map((a) =>
+        `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid rgba(255,255,255,.08);border-radius:10px">
+          <div style="flex:1"><div style="font-size:14px">${esc(a.name)}</div><div style="font-size:11px;color:#6b7488">${esc(a.id)}</div></div>
+          ${wxStatusBadge(a.status)}
+          ${a.status === "pending" ? `<button class="iconbtn ghost wx-qr" data-id="${esc(a.id)}" title="显示二维码">▦</button>` : ""}
+          <button class="iconbtn ghost wx-del" data-id="${esc(a.id)}" title="移除">✕</button>
+        </div>`).join("");
+      box.querySelectorAll(".wx-del").forEach((b) => b.addEventListener("click", () => wxRemove(b.dataset.id)));
+      box.querySelectorAll(".wx-qr").forEach((b) => b.addEventListener("click", () => wxShowQR(b.dataset.id)));
+    } catch (e) { box.innerHTML = `<div style="color:#ff8080;font-size:13px;padding:8px">加载失败：${esc(e.message)}</div>`; }
+  }
+
+  function wxStopPolling() { if (wxPollTimer) clearInterval(wxPollTimer); if (wxQRTimer) clearInterval(wxQRTimer); wxPollTimer = wxQRTimer = wxQRId = null; }
+
+  function wxShowQR(id) {
+    wxQRId = id;
+    $("#wechatList").style.display = "none";
+    $("#wechatQR").style.display = "block";
+    $("#wechatQRStatus").textContent = "等待扫码…";
+    const refreshImg = () => { $("#wechatQRImg").src = `/agent/wechat/qr?id=${encodeURIComponent(id)}&token=${wxTok()}&_=${Date.now()}`; };
+    refreshImg();
+    wxQRTimer = setInterval(refreshImg, 15000); // 二维码服务端自动刷新,定期重取
+    wxPollTimer = setInterval(async () => {
+      try {
+        const d = await wxApi("GET", "accounts");
+        const a = ((d && d.accounts) || []).find((x) => x.id === id);
+        if (a && a.status === "online") { wxStopPolling(); $("#wechatQR").style.display = "none"; $("#wechatList").style.display = "flex"; toast("✅ 账号已登录"); wxLoadList(); }
+      } catch {}
+    }, 2000);
+  }
+
+  async function wxAdd() {
+    try { const d = await wxApi("POST", "accounts"); await wxLoadList(); wxShowQR(d.id); }
+    catch (e) { toast("添加失败：" + e.message); }
+  }
+
+  async function wxRemove(id) {
+    try { await wxApi("DELETE", "accounts", "id=" + encodeURIComponent(id)); wxLoadList(); }
+    catch (e) { toast("移除失败：" + e.message); }
+  }
+
+  function wxOpen() {
+    if (!tokenInput.value.trim()) { toast(t("toast_need_token")); return; }
+    $("#wechatOverlay").classList.add("show");
+    $("#wechatQR").style.display = "none"; $("#wechatList").style.display = "flex";
+    wxLoadList();
+  }
+  function wxClose() { wxStopPolling(); $("#wechatOverlay").classList.remove("show"); }
+
+  $("#wechatBtn").addEventListener("click", wxOpen);
+  $("#wechatClose").addEventListener("click", wxClose);
+  $("#wechatRefresh").addEventListener("click", wxLoadList);
+  $("#wechatAdd").addEventListener("click", wxAdd);
+  $("#wechatQRCancel").addEventListener("click", () => { wxStopPolling(); $("#wechatQR").style.display = "none"; $("#wechatList").style.display = "flex"; });
+
+  $("#logoutBtn").addEventListener("click", async () => {
+    try { await fetch("/agent/logout", { method: "POST" }); } catch {}
+    try { localStorage.removeItem("agent.token"); } catch {}
+    location.replace("/");
+  });
 
   // ── init ────────────────────────────────────────────────
   buildCmdBar(); applyLang(); renderCwd();

@@ -7,11 +7,13 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 
 	"claude-agent/internal/config"
 	"claude-agent/internal/server"
+	"claude-agent/internal/wechat"
 )
 
 // version 由发布构建通过 -ldflags "-X main.version=vX.Y.Z" 注入；本地构建为 dev。
@@ -28,7 +30,19 @@ func main() {
 	if cfg.Token == "" {
 		log.Fatal("[claude-agent] 必须设置环境变量 AGENT_TOKEN（共享鉴权 token，客户端需携带）")
 	}
-	if err := server.NewServer(cfg).Run(); err != nil {
+
+	srv := server.NewServer(cfg)
+
+	// 微信 ClawBot 多账号通道为可选项,默认关闭;开启时与 HTTP 服务并行,互不影响。
+	// 已保存的账号在启动时自动恢复登录;新账号经 Web 控制台扫码添加。
+	if cfg.WeChatEnabled {
+		mgr := wechat.NewManager(context.Background(), cfg)
+		mgr.Restore()
+		srv.SetWeChat(mgr)
+		log.Printf("[claude-agent] 微信多账号通道已启用")
+	}
+
+	if err := srv.Run(); err != nil {
 		log.Fatalf("[claude-agent] 服务退出: %v", err)
 	}
 }

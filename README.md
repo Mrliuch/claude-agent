@@ -79,9 +79,61 @@ AGENT_TOKEN=$(openssl rand -hex 24) ./claude-agent
 | `CLAUDE_PERMISSION_MODE` | 传给 `claude --permission-mode`。保持 `default` 才会弹窗确认危险操作。 | `default` |
 | `CLAUDE_IDLE_TIMEOUT` | 空闲多少秒后回收会话（及 `claude` 子进程）。`0` = 禁用。 | `1800` |
 | `AGENT_DEBUG` | 设为任意值则打印原始桥接流量日志。 | _(空)_ |
+| `AGENT_WECHAT` | 设为 `on` 启用[微信 ClawBot 接入](#微信-clawbot-接入多账号)。 | `off` |
+| `AGENT_WECHAT_TOKEN_PATH` | 微信账号 token 存放目录。 | `~/.config/claude-agent/wechat/` |
+| `AGENT_WECHAT_BASEURL` | iLink 接入域名（一般无需改，便于测试 mock）。 | `https://ilinkai.weixin.qq.com` |
+| `AGENT_WECHAT_MAX_SESSIONS` | 单账号并发会话上限（每会话 = 1 个 `claude` 子进程）。 | `20` |
 
 > ⚠️ 在你在意的机器上，**绝不要**把 `CLAUDE_PERMISSION_MODE` 设成任何会绕过弹窗的值。整个设计
 > 的意义就是 *你* 来批准每一步。
+
+> 🔒 **Web 控制台已加认证。** 访问 `/` 需先输入 `AGENT_TOKEN`（与 WebSocket 复用同一 token）；
+> 认证后种下 cookie，未认证只下发登录页。`AGENT_UI=off` 可整体关闭页面。
+
+---
+
+## 微信 ClawBot 接入（多账号）
+
+> 🧪 **可选、默认关闭。** 不设 `AGENT_WECHAT=on` 时，本节一切逻辑都不会启动，对原有
+> WebSocket / Web 控制台功能零影响。
+
+[微信 ClawBot](https://www.ithome.com/0/931/431.htm) 是腾讯 2026-03 上线的官方插件，让你在微信聊天里
+直接驱动本地 AI Agent。本通道实现了它的 **iLink 本地协议**，把 claude-agent 伪装成 ClawBot 端，
+于是你可以**在微信里直接和目标机上的 `claude` 对话**，并支持**多个微信号各自作为独立机器人**。
+
+```
+微信用户 ──> ilinkai.weixin.qq.com ──长轮询──> claude-agent ──> claude CLI
+                              多账号 / 每用户独立会话 / typing 保活 / 白名单授权
+```
+
+### 启用与登录
+
+```bash
+AGENT_TOKEN=<你的token> AGENT_WECHAT=on ./claude-agent
+```
+
+在 Web 控制台里管理账号(推荐):浏览器打开 `/` → 输入 `AGENT_TOKEN` 登录 → 点头部 **📱** 打开
+「微信账号」面板 → **＋ 添加账号** → 弹出二维码 → 用微信「扫一扫」登录。二维码**过期自动刷新**，
+页面轮询到「在线」自动收起。每个账号 token 持久化到 `AGENT_WECHAT_TOKEN_PATH` 目录，**重启自动恢复
+登录、免重扫**;每个账号可独立移除。
+
+> 单账号场景下,启动时二维码内容也会打印到日志(`journalctl`),但多账号建议走页面。
+
+### 用法与边界
+
+- **多账号**:每个微信号一套独立 `bot_token`，互不干扰;同一机器人下不同微信用户各自独立 `claude` 会话。
+- **纯文字**:对齐 ClawBot 现状，仅收发文本(图片/语音/文件暂不支持)。
+- **会话回收**:空闲按 `CLAUDE_IDLE_TIMEOUT` 回收 `claude` 子进程。
+- **人在回路 + 白名单**:只读巡检命令(`ls`/`df`/`docker ps`/`git log`/`systemctl status` 等)自动放行;
+  写/危险操作(`rm`/写重定向/`systemctl restart`/`docker run` 等)才把确认卡片发到微信,
+  回复 `y`/`允许` 放行、`n`/`拒绝` 拒绝;`AskUserQuestion` 回复选项编号。
+- **送达可靠性**:出站消息带唯一 `client_id` + `base_info`，并在处理期间 `sendtyping` 保活，
+  避免回复落在窗口外被静默丢弃。
+
+### ⚠️ 风险须知
+
+- **iLink 是社区逆向得到的非官方契约**(腾讯只对官方 OpenClaw 开放)。腾讯改协议可能随时失效;
+  存在 **ToS / 封号灰度风险**，请自行评估后在非主力微信号上使用。
 
 ---
 
@@ -268,6 +320,7 @@ fs.go          带路径围栏的文件管理端点
 sessions.go    只读的 Claude 会话历史（列表 + 回看）
 web.go         嵌入并托管控制台
 web/index.html 零依赖 Web 控制台
+internal/wechat 微信 ClawBot 接入通道（iLink 协议、可选）
 cmd/fakeclaude 测试用的假 claude
 cmd/smoke      一次性部署烟雾测试客户端
 ```

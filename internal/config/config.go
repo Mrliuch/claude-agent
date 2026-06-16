@@ -16,6 +16,12 @@ type Config struct {
 	SessionID      string // 非空则以 --resume 续接该 claude 会话（按连接设置，不来自 env）
 	IdleTimeoutSec int    // 空闲多少秒无用户消息则结束会话(回收claude)；0=禁用，默认1800
 	UIEnabled      bool   // 是否在 / 提供内置 Web 控制台（AGENT_UI=off 关闭）
+
+	// 微信 ClawBot 接入通道（默认关闭，不影响原有功能）。
+	WeChatEnabled     bool   // AGENT_WECHAT=on 时启用微信通道
+	WeChatTokenPath   string // bot_token 持久化路径，留空用 ~/.config/claude-agent/wechat_token
+	WeChatBaseURL     string // iLink 接入域名，留空用官方默认；用于测试 mock
+	WeChatMaxSessions int    // 并发微信会话上限（每会话=1 个 claude 子进程），默认 20
 }
 
 // LoadConfig 从环境变量读取配置并填充默认值。
@@ -29,6 +35,11 @@ func LoadConfig() Config {
 		PermissionMode: envOr("CLAUDE_PERMISSION_MODE", "default"),
 		IdleTimeoutSec: envInt("CLAUDE_IDLE_TIMEOUT", 1800),
 		UIEnabled:      envOr("AGENT_UI", "on") != "off",
+
+		WeChatEnabled:     envOr("AGENT_WECHAT", "off") == "on",
+		WeChatTokenPath:   os.Getenv("AGENT_WECHAT_TOKEN_PATH"),
+		WeChatBaseURL:     os.Getenv("AGENT_WECHAT_BASEURL"),
+		WeChatMaxSessions: envInt("AGENT_WECHAT_MAX_SESSIONS", 20),
 	}
 }
 
