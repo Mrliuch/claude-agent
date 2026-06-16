@@ -17,6 +17,10 @@ func TestBashReadOnly(t *testing.T) {
 		{"ip -br addr 2>/dev/null && ip route", true},
 		{"journalctl -u nginx --no-pager | tail -50", true},
 		{"find /var/log -name '*.log'", true},
+		// 引号字符串里的 > 不应误判为写重定向(真实巡检命令)
+		{`echo "大文件 (>1G in /var /tmp)" && du -sh /var/log /tmp 2>/dev/null`, true},
+		{`echo "===== Inode =====" && df -i 2>/dev/null | grep -v tmpfs | head -10`, true},
+		{`echo "a && b || c ; d" && uname -a`, true},
 		// 写/危险 —— 应确认
 		{"rm -rf /tmp/x", false},
 		{"echo hi > /etc/motd", false},

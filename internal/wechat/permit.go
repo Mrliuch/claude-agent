@@ -38,6 +38,12 @@ var readOnlyBashCmds = map[string]bool{
 // 危险输出重定向:> / >> 指向非 /dev/null 的目标视为写操作。
 var redirectRe = regexp.MustCompile(`(?:^|[^0-9&])>>?\s*([^\s;|&]+)`)
 
+// quotedRe 匹配单/双引号包裹的字符串(用于剔除字符串字面量,避免其中的 > | && 误判)。
+var quotedRe = regexp.MustCompile(`'[^']*'|"[^"]*"`)
+
+// stripQuoted 把引号字符串替换为空格,消除字面量里的 shell 元字符干扰。
+func stripQuoted(cmd string) string { return quotedRe.ReplaceAllString(cmd, " ") }
+
 // shellSplitRe 按 ; && || | 切分管道/命令序列(|| && 优先于单 |)。
 var shellSplitRe = regexp.MustCompile(`\|\||&&|;|\|`)
 
@@ -59,6 +65,8 @@ func bashReadOnly(cmd string) bool {
 	if cmd == "" {
 		return false
 	}
+	// 先剔除引号字符串字面量,避免其中的 > | && ; 等被误判。
+	cmd = stripQuoted(cmd)
 	if hasDangerousRedirect(cmd) {
 		return false
 	}
@@ -79,6 +87,7 @@ func bashReadOnly(cmd string) bool {
 
 // hasDangerousRedirect 检测写文件重定向(忽略 2>/dev/null、>/dev/null、2>&1 等)。
 func hasDangerousRedirect(cmd string) bool {
+	cmd = stripQuoted(cmd)
 	for _, m := range redirectRe.FindAllStringSubmatch(cmd, -1) {
 		if strings.TrimSpace(m[1]) != "/dev/null" {
 			return true
