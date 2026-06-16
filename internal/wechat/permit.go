@@ -43,12 +43,36 @@ var dangerousCmds = map[string]bool{
 	// 包管理
 	"apt": true, "apt-get": true, "yum": true, "dnf": true, "rpm": true, "dpkg": true,
 	"pip": true, "pip3": true, "npm": true, "yarn": true, "gem": true, "make": true,
-	"docker": true, "podman": true, "kubectl": true, "helm": true,
+	"helm": true,
+	// docker/podman/git/kubectl 不整体拉黑,按子命令细分(见 bashSafe)
 	// 任意代码执行 / 外联
 	"eval": true, "exec": true, "source": true, "python": true, "python3": true,
 	"perl": true, "ruby": true, "php": true, "node": true, "bash": true, "sh": true,
 	"zsh": true, "nc": true, "ncat": true, "ssh": true, "scp": true, "curl": true,
-	"wget": true, "crontab": true, "at": true, "git": true,
+	"wget": true, "crontab": true, "at": true,
+}
+
+// 双用途命令的只读子命令白名单(命中即放行,其余子命令需确认)。
+var dockerReadOnlySub = map[string]bool{
+	"ps": true, "images": true, "stats": true, "logs": true, "inspect": true,
+	"version": true, "info": true, "top": true, "port": true, "events": true,
+	"history": true, "df": true, "search": true,
+}
+var dockerNestedSub = map[string]bool{ // docker image/container/... 后再跟只读动词
+	"image": true, "container": true, "volume": true, "network": true,
+	"node": true, "service": true, "system": true, "compose": true, "context": true, "config": true,
+}
+var dockerNestedVerb = map[string]bool{"ls": true, "ps": true, "inspect": true, "logs": true, "df": true, "version": true, "view": true}
+
+var gitReadOnlySub = map[string]bool{
+	"status": true, "log": true, "diff": true, "show": true, "branch": true,
+	"remote": true, "rev-parse": true, "describe": true, "ls-files": true,
+	"ls-remote": true, "blame": true, "tag": true, "config": true, "shortlog": true,
+	"reflog": true, "cat-file": true, "name-rev": true, "grep": true, "for-each-ref": true, "whatchanged": true,
+}
+var kubectlReadOnlySub = map[string]bool{
+	"get": true, "describe": true, "logs": true, "top": true, "version": true,
+	"explain": true, "api-resources": true, "api-versions": true, "cluster-info": true, "config": true,
 }
 
 // 危险输出重定向:> / >> 指向非 /dev/null 的目标视为写操作。
@@ -119,9 +143,65 @@ func bashSafe(cmd string) bool {
 			if strings.Contains(seg, "system(") || strings.Contains(seg, "print >") {
 				return false
 			}
+		case "docker", "podman":
+			if !dockerSafe(seg) {
+				return false
+			}
+		case "git":
+			if !subFirstIn(seg, gitReadOnlySub) {
+				return false
+			}
+		case "kubectl":
+			if !subFirstIn(seg, kubectlReadOnlySub) {
+				return false
+			}
 		}
 	}
 	return true
+}
+
+// subcommands 返回命令名之后的非选项参数序列(子命令链)。
+func subcommands(seg string) []string {
+	seg = strings.TrimSpace(seg)
+	seg = strings.TrimLeft(seg, "({ \t")
+	fields := strings.Fields(seg)
+	var subs []string
+	seenCmd := false
+	for _, f := range fields {
+		if !seenCmd {
+			if f == "sudo" || (strings.Contains(f, "=") && !strings.HasPrefix(f, "-")) {
+				continue
+			}
+			seenCmd = true // 这是命令名本身
+			continue
+		}
+		if strings.HasPrefix(f, "-") {
+			continue // 跳过选项
+		}
+		subs = append(subs, f)
+	}
+	return subs
+}
+
+// subFirstIn 判定第一个子命令是否在只读集合内。
+func subFirstIn(seg string, set map[string]bool) bool {
+	subs := subcommands(seg)
+	return len(subs) > 0 && set[subs[0]]
+}
+
+// dockerSafe 判定 docker/podman 是否只读(含 image/container 等嵌套只读动词)。
+func dockerSafe(seg string) bool {
+	subs := subcommands(seg)
+	if len(subs) == 0 {
+		return false
+	}
+	if dockerReadOnlySub[subs[0]] {
+		return true
+	}
+	if dockerNestedSub[subs[0]] && len(subs) > 1 && dockerNestedVerb[subs[1]] {
+		return true
+	}
+	return false
 }
 
 // hasDangerousRedirect 检测写文件重定向(忽略 2>/dev/null、>/dev/null、2>&1 等)。

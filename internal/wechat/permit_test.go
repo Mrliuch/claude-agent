@@ -23,6 +23,20 @@ func TestBashSafe(t *testing.T) {
 		{"systemctl list-units --type=service", true},
 		{"sysctl -a | grep net", true},
 		{"sensors 2>/dev/null; dmidecode -t system 2>/dev/null", true}, // 未知但非危险命令默认放行
+		// docker/git/kubectl 只读子命令应放行
+		{"docker ps --format '{{.Names}}'", true},
+		{"docker images && docker stats --no-stream", true},
+		{"docker image ls && docker container inspect web 2>/dev/null", true},
+		{"git log --oneline -10 && git status", true},
+		{"kubectl get pods -A && kubectl top nodes", true},
+		// docker/git/kubectl 写子命令应确认
+		{"docker run -d nginx", false},
+		{"docker rm -f web", false},
+		{"docker image rm nginx", false},
+		{"git push origin main", false},
+		{"git reset --hard HEAD", false},
+		{"kubectl delete pod web", false},
+		{"kubectl apply -f x.yaml", false},
 		// 写/危险 —— 应确认
 		{"rm -rf /tmp/x", false},
 		{"echo hi > /etc/motd", false},
