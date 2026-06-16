@@ -178,9 +178,15 @@ func (sm *sessionManager) consume(us *userSession) {
 	for ev := range us.br.Events() {
 		switch ev["type"] {
 		case "permission_request":
+			reqID := protocol.StrOr(ev["request_id"], "")
+			// 白名单:只读操作自动放行,不打扰用户;其余转入聊天内确认。
+			if autoApprove(protocol.StrOr(ev["tool_name"], ""), ev["tool_input"]) {
+				_ = us.br.RespondPermission(reqID, true, nil)
+				continue
+			}
 			us.mu.Lock()
 			us.pKind = pendingPermission
-			us.pReqID = protocol.StrOr(ev["request_id"], "")
+			us.pReqID = reqID
 			us.mu.Unlock()
 			sm.send(us.userID, us.token(), renderPermissionPrompt(ev))
 		case "user_question":

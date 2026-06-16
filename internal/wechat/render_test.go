@@ -76,7 +76,7 @@ func TestParseQuestionReply_Multi(t *testing.T) {
 	}
 }
 
-func TestRenderAssistantText(t *testing.T) {
+func TestRenderAssistantTextOnly(t *testing.T) {
 	ev := map[string]any{
 		"type": "assistant",
 		"blocks": []map[string]any{
@@ -85,8 +85,9 @@ func TestRenderAssistantText(t *testing.T) {
 		},
 	}
 	out := renderEvent(ev)
-	if !strings.Contains(out, "你好") || !strings.Contains(out, "Bash: ls -la") {
-		t.Errorf("unexpected render: %q", out)
+	// 只发文本,工具调用不推送(避免刷屏)。
+	if out != "你好" {
+		t.Errorf("expected only text, got %q", out)
 	}
 }
 

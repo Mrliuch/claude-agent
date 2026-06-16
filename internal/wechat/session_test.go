@@ -116,10 +116,10 @@ func TestPermissionFlow(t *testing.T) {
 	sm.Dispatch(Message{FromUserID: "u1", ContextToken: "c1", ItemList: textItems("do it")})
 	<-fb.userMsgs // 首条消息
 
-	// claude 请求权限 → 应转成微信提示并进入待确认。
+	// claude 请求危险操作权限 → 应转成微信提示并进入待确认(只读命令会被白名单放行,故用 rm)。
 	fb.events <- map[string]any{
 		"type": "permission_request", "request_id": "req-1",
-		"tool_name": "Bash", "tool_input": map[string]any{"command": "ls"},
+		"tool_name": "Bash", "tool_input": map[string]any{"command": "rm -rf /tmp/x"},
 	}
 	if prompt := recvString(t, sent); prompt == "" {
 		t.Fatal("expected permission prompt sent")
@@ -134,6 +134,28 @@ func TestPermissionFlow(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("RespondPermission not called")
+	}
+}
+
+func TestPermissionAutoApprove(t *testing.T) {
+	sm, fb, _, cancel := newTestManager(t, 5)
+	defer cancel()
+
+	sm.Dispatch(Message{FromUserID: "u1", ContextToken: "c1", ItemList: textItems("巡检")})
+	<-fb.userMsgs
+
+	// 只读命令 → 应自动放行(直接 RespondPermission true),不发提示、不进入待确认。
+	fb.events <- map[string]any{
+		"type": "permission_request", "request_id": "ro-1",
+		"tool_name": "Bash", "tool_input": map[string]any{"command": "df -h && free -m"},
+	}
+	select {
+	case p := <-fb.perms:
+		if p.id != "ro-1" || !p.allow {
+			t.Errorf("got %+v want auto-allow ro-1", p)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("read-only permission not auto-approved")
 	}
 }
 

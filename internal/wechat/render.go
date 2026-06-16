@@ -42,17 +42,16 @@ func renderEvent(ev map[string]any) string {
 	}
 }
 
+// renderAssistant 只发助手文本;工具调用不逐条推送(避免刷屏),
+// 危险操作由权限确认卡片承载,只读操作自动放行后静默执行。
 func renderAssistant(ev map[string]any) string {
 	blocks, _ := ev["blocks"].([]map[string]any)
 	var parts []string
 	for _, b := range blocks {
-		switch b["kind"] {
-		case "text":
+		if b["kind"] == "text" {
 			if t := strings.TrimSpace(protocol.StrOr(b["text"], "")); t != "" {
 				parts = append(parts, t)
 			}
-		case "tool_use":
-			parts = append(parts, "🔧 "+toolSummary(protocol.StrOr(b["name"], ""), b["input"]))
 		}
 	}
 	return strings.Join(parts, "\n\n")

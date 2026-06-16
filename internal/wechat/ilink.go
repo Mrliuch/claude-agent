@@ -8,11 +8,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
+
+// debugEnabled 由 AGENT_DEBUG 控制,开启后打印 iLink 原始请求/响应,便于联调字段。
+var debugEnabled = os.Getenv("AGENT_DEBUG") != ""
 
 // iLink 协议常量。这些是社区逆向得到的非官方契约,腾讯改协议可能失效。
 const (
@@ -69,6 +74,9 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body any) 
 		if err != nil {
 			return nil, fmt.Errorf("wechat: marshal body: %w", err)
 		}
+		if debugEnabled {
+			log.Printf("[wechat-debug] %s %s req=%s", method, path, clip(string(data), 800))
+		}
 		rdr = bytes.NewReader(data)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, rdr)
@@ -93,6 +101,9 @@ func (c *Client) do(client *http.Client, req *http.Request, out any) error {
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
+	if debugEnabled {
+		log.Printf("[wechat-debug] %s %s -> %d body=%s", req.Method, req.URL.Path, resp.StatusCode, clip(string(data), 800))
+	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return ErrUnauthorized
 	}
