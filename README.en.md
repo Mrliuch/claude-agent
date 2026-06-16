@@ -84,17 +84,21 @@ All configuration is via environment variables.
 | `CLAUDE_PERMISSION_MODE` | Passed to `claude --permission-mode`. Keep `default` so dangerous ops prompt. | `default` |
 | `CLAUDE_IDLE_TIMEOUT` | Seconds of inactivity before the session (and the `claude` child process) is reaped. `0` = disabled. | `1800` |
 | `AGENT_DEBUG` | Set to any value to log raw bridge traffic. | _(empty)_ |
-| `AGENT_WECHAT` | Set to `on` to enable the [WeChat ClawBot channel](#wechat-clawbot-integration). | `off` |
-| `AGENT_WECHAT_TOKEN_PATH` | Where the WeChat `bot_token` is persisted. | `~/.config/claude-agent/wechat_token` |
+| `AGENT_WECHAT` | Set to `on` to enable [WeChat ClawBot integration](#wechat-clawbot-integration-multi-account). | `off` |
+| `AGENT_WECHAT_TOKEN_PATH` | Directory holding per-account tokens. | `~/.config/claude-agent/wechat/` |
 | `AGENT_WECHAT_BASEURL` | iLink endpoint (rarely changed; handy for mocking in tests). | `https://ilinkai.weixin.qq.com` |
-| `AGENT_WECHAT_MAX_SESSIONS` | Max concurrent WeChat sessions (each = one `claude` child process). | `20` |
+| `AGENT_WECHAT_MAX_SESSIONS` | Max concurrent sessions per account (each = one `claude` child process). | `20` |
 
 > ⚠️ **Never** set `CLAUDE_PERMISSION_MODE` to anything that bypasses prompts on a host you
 > care about. The whole point is that *you* approve each action.
 
+> 🔒 **The web console is now authenticated.** Visiting `/` requires the `AGENT_TOKEN` (same token
+> as WebSocket); after login a cookie is set, and an unauthenticated request only gets the login
+> page. Use `AGENT_UI=off` to disable the page entirely.
+
 ---
 
-## WeChat ClawBot integration
+## WeChat ClawBot integration (multi-account)
 
 > 🧪 **Optional, off by default.** Without `AGENT_WECHAT=on`, none of this starts — zero impact
 > on the existing WebSocket / web-console functionality.
@@ -102,37 +106,43 @@ All configuration is via environment variables.
 [WeChat ClawBot](https://www.ithome.com/0/931/431.htm) is Tencent's official plugin (launched
 2026-03) that lets you drive a local AI agent from inside WeChat chat. This channel implements
 its **iLink local protocol**, presenting claude-agent as a ClawBot endpoint — so you can **talk
-to the `claude` on your target machine directly from WeChat**.
+to the `claude` on your target machine directly from WeChat**, with **multiple WeChat accounts each
+acting as an independent bot**.
 
 ```
 WeChat user ──> ilinkai.weixin.qq.com ──long-poll──> claude-agent ──> claude CLI
-                                          QR login / per-user session / in-chat approvals
+                       multi-account / per-user session / typing keep-alive / allowlist
 ```
 
-### Enable
+### Enable & log in
 
 ```bash
 AGENT_TOKEN=<your-token> AGENT_WECHAT=on ./claude-agent
 ```
 
-A QR code is printed to the terminal — **scan it with WeChat** to authorize. The `bot_token` is
-persisted to `AGENT_WECHAT_TOKEN_PATH` (no rescan on restart); a fresh QR is shown if it expires.
+Manage accounts from the web console (recommended): open `/` → log in with `AGENT_TOKEN` → click
+**📱** in the header → **＋ Add account** → a QR appears → scan with WeChat. The QR **auto-refreshes**
+on expiry and collapses once the page polls the account "online". Each account's token is persisted
+under `AGENT_WECHAT_TOKEN_PATH`, so accounts **auto-restore on restart (no rescan)**; remove any
+account independently.
 
 ### Behavior & limits
 
+- **Multi-account**: each WeChat number has its own `bot_token`; different users of one bot get
+  isolated `claude` sessions.
 - **Text only** (matches ClawBot today; no image/voice/file yet).
-- **One independent `claude` session per WeChat user**, reaped per `CLAUDE_IDLE_TIMEOUT`.
-- **Human-in-the-loop preserved**: when `claude` wants to run Bash / write files, the approval
-  request is sent to you as a WeChat message — reply `y`/`允许` to allow, `n`/`拒绝` to deny;
-  for `AskUserQuestion`, reply with the option number.
+- **Human-in-the-loop + allowlist**: read-only inspection commands (`ls`/`df`/`docker ps`/`git log`/
+  `systemctl status` …) are auto-approved; write/dangerous ops (`rm`/redirects/`systemctl restart`/
+  `docker run` …) send a confirmation card to WeChat — reply `y`/`允许` to allow, `n`/`拒绝` to deny;
+  `AskUserQuestion` → reply the option number.
+- **Delivery reliability**: outbound messages carry a unique `client_id` + `base_info` and keep a
+  `sendtyping` heartbeat during processing, so replies aren't silently dropped outside the window.
 
 ### ⚠️ Caveats
 
 - **iLink is a community-reverse-engineered, unofficial contract** (Tencent only opens it to the
   official OpenClaw). It may break if Tencent changes the protocol, and carries **ToS / account
   ban risk** — use on a non-primary WeChat account at your own discretion.
-- Each WeChat user = one resident `claude` child process; bounded by `AGENT_WECHAT_MAX_SESSIONS`
-  plus idle reaping.
 
 ---
 
