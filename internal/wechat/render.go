@@ -89,18 +89,53 @@ func toolSummary(name string, input any) string {
 	return name + ": " + clip(string(data), 200)
 }
 
-// renderPermissionPrompt 渲染权限确认卡片。
+// renderPermissionPrompt 渲染权限确认卡片(微信友好排版)。
 func renderPermissionPrompt(ev map[string]any) string {
 	name := protocol.StrOr(ev["tool_name"], "操作")
+	desc := strings.TrimSpace(protocol.StrOr(ev["description"], ""))
 	var b strings.Builder
-	b.WriteString("⚠️ Claude 请求执行 ")
-	b.WriteString(toolSummary(name, ev["tool_input"]))
-	if desc := strings.TrimSpace(protocol.StrOr(ev["description"], "")); desc != "" {
+	b.WriteString("🔐 操作确认\n")
+	if desc != "" {
+		b.WriteString("\n📋 用途：")
+		b.WriteString(clip(desc, 200))
 		b.WriteString("\n")
-		b.WriteString(clip(desc, 300))
 	}
-	b.WriteString("\n\n回复 y / 允许 放行，n / 拒绝 拒绝")
+	b.WriteString("\n")
+	b.WriteString(permTargetLabel(name))
+	b.WriteString("\n")
+	b.WriteString(permTarget(name, ev["tool_input"]))
+	b.WriteString("\n\n———————————\n✅ 允许：回复 y 或 允许\n🚫 拒绝：回复 n 或 拒绝")
 	return b.String()
+}
+
+// permTargetLabel 给出操作对象的标题行。
+func permTargetLabel(name string) string {
+	switch name {
+	case "Bash":
+		return "⌨️ 命令（Bash）："
+	case "Write":
+		return "📄 写入文件："
+	case "Edit":
+		return "✏️ 修改文件："
+	default:
+		return "🔧 " + name + "："
+	}
+}
+
+// permTarget 给出操作对象的正文(命令全文/文件路径),独占多行,便于阅读。
+func permTarget(name string, input any) string {
+	m, _ := input.(map[string]any)
+	switch name {
+	case "Bash":
+		return clip(strings.TrimSpace(protocol.StrOr(m["command"], "")), 600)
+	case "Write", "Edit":
+		return protocol.StrOr(m["file_path"], "")
+	}
+	if m == nil {
+		return name
+	}
+	data, _ := json.Marshal(m)
+	return clip(string(data), 300)
 }
 
 // renderQuestionPrompt 渲染 AskUserQuestion 选项卡;每题选项从 1 开始编号。
