@@ -7,11 +7,13 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 
 	"claude-agent/internal/config"
 	"claude-agent/internal/server"
+	"claude-agent/internal/wechat"
 )
 
 // version 由发布构建通过 -ldflags "-X main.version=vX.Y.Z" 注入；本地构建为 dev。
@@ -28,6 +30,16 @@ func main() {
 	if cfg.Token == "" {
 		log.Fatal("[claude-agent] 必须设置环境变量 AGENT_TOKEN（共享鉴权 token，客户端需携带）")
 	}
+
+	// 微信 ClawBot 通道为可选项,默认关闭;开启时与 HTTP 服务并行运行,互不影响。
+	if cfg.WeChatEnabled {
+		go func() {
+			if err := wechat.NewChannel(cfg).Run(context.Background()); err != nil {
+				log.Printf("[claude-agent] 微信通道退出: %v", err)
+			}
+		}()
+	}
+
 	if err := server.NewServer(cfg).Run(); err != nil {
 		log.Fatalf("[claude-agent] 服务退出: %v", err)
 	}

@@ -79,9 +79,51 @@ AGENT_TOKEN=$(openssl rand -hex 24) ./claude-agent
 | `CLAUDE_PERMISSION_MODE` | 传给 `claude --permission-mode`。保持 `default` 才会弹窗确认危险操作。 | `default` |
 | `CLAUDE_IDLE_TIMEOUT` | 空闲多少秒后回收会话（及 `claude` 子进程）。`0` = 禁用。 | `1800` |
 | `AGENT_DEBUG` | 设为任意值则打印原始桥接流量日志。 | _(空)_ |
+| `AGENT_WECHAT` | 设为 `on` 启用[微信 ClawBot 接入通道](#微信-clawbot-接入)。 | `off` |
+| `AGENT_WECHAT_TOKEN_PATH` | 微信 `bot_token` 持久化路径。 | `~/.config/claude-agent/wechat_token` |
+| `AGENT_WECHAT_BASEURL` | iLink 接入域名（一般无需改，便于测试 mock）。 | `https://ilinkai.weixin.qq.com` |
+| `AGENT_WECHAT_MAX_SESSIONS` | 并发微信会话上限（每会话 = 1 个 `claude` 子进程）。 | `20` |
 
 > ⚠️ 在你在意的机器上，**绝不要**把 `CLAUDE_PERMISSION_MODE` 设成任何会绕过弹窗的值。整个设计
 > 的意义就是 *你* 来批准每一步。
+
+---
+
+## 微信 ClawBot 接入
+
+> 🧪 **可选、默认关闭的实验特性。** 不设 `AGENT_WECHAT=on` 时，本节一切逻辑都不会启动，对原有
+> WebSocket / Web 控制台功能零影响。
+
+[微信 ClawBot](https://www.ithome.com/0/931/431.htm) 是腾讯 2026-03 上线的官方插件，让你在微信聊天里
+直接驱动本地 AI Agent。本通道实现了它的 **iLink 本地协议**，把 claude-agent 伪装成一个 ClawBot
+端，于是你可以**在微信里直接和目标机上的 `claude` 对话**。
+
+```
+微信用户 ──> ilinkai.weixin.qq.com ──长轮询──> claude-agent ──> claude CLI
+                                              扫码登录 / 每用户独立会话 / 聊天内权限确认
+```
+
+### 启用
+
+```bash
+AGENT_TOKEN=<你的token> AGENT_WECHAT=on ./claude-agent
+```
+
+启动后终端会打印一个二维码，**用手机微信扫码授权**即可。`bot_token` 会持久化到
+`AGENT_WECHAT_TOKEN_PATH`，重启免再扫；失效会自动重新出码。
+
+### 用法与边界
+
+- **纯文字**：对齐 ClawBot 现状，仅收发文本（图片/语音/文件暂不支持）。
+- **每个微信用户一条独立 `claude` 会话**，空闲按 `CLAUDE_IDLE_TIMEOUT` 回收。
+- **人在回路仍然保留**：`claude` 要执行 Bash / 写文件等危险操作时，会把确认请求作为微信消息
+  发给你，回复 `y`/`允许` 放行、`n`/`拒绝` 拒绝；`AskUserQuestion` 则回复选项编号。
+
+### ⚠️ 风险须知
+
+- **iLink 是社区逆向得到的非官方契约**（腾讯只对官方 OpenClaw 开放）。腾讯改协议可能随时失效；
+  存在 **ToS / 封号灰度风险**，请自行评估后在非主力微信号上使用。
+- 每个微信用户 = 一个常驻 `claude` 子进程，靠 `AGENT_WECHAT_MAX_SESSIONS` + 空闲回收护资源。
 
 ---
 
@@ -268,6 +310,7 @@ fs.go          带路径围栏的文件管理端点
 sessions.go    只读的 Claude 会话历史（列表 + 回看）
 web.go         嵌入并托管控制台
 web/index.html 零依赖 Web 控制台
+internal/wechat 微信 ClawBot 接入通道（iLink 协议、可选）
 cmd/fakeclaude 测试用的假 claude
 cmd/smoke      一次性部署烟雾测试客户端
 ```
