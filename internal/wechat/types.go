@@ -137,3 +137,13 @@ func (s qrStatusResp) baseURL() string {
 
 // confirmed 以是否拿到 token 判定扫码确认完成(比依赖 status 字符串更稳)。
 func (s qrStatusResp) confirmed() bool { return s.token() != "" }
+
+// expired 判定二维码是否已被服务端作废,需要重新出码。
+func (s qrStatusResp) expired() bool {
+	switch s.Status {
+	case "expired", "timeout", "invalid", "cancel", "canceled", "cancelled":
+		return true
+	default:
+		return false
+	}
+}

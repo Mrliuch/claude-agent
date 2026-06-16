@@ -83,6 +83,44 @@ func TestReloginScanFlow(t *testing.T) {
 	}
 }
 
+func TestReloginRefreshOnExpired(t *testing.T) {
+	qrCalls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/ilink/bot/get_bot_qrcode"):
+			qrCalls++
+			_ = json.NewEncoder(w).Encode(qrCodeResp{QRCode: "k", QRCodeImgContent: "https://liteapp/q/x"})
+		case strings.HasPrefix(r.URL.Path, "/ilink/bot/get_qrcode_status"):
+			if qrCalls == 1 {
+				_ = json.NewEncoder(w).Encode(qrStatusResp{Status: "expired"}) // 第一张码过期
+			} else {
+				_ = json.NewEncoder(w).Encode(qrStatusResp{Status: "confirmed", BotToken: "tok2"}) // 重出码后扫成功
+			}
+		}
+	}))
+	defer srv.Close()
+
+	ch := NewChannel(config.Config{WeChatBaseURL: srv.URL, WeChatTokenPath: filepath.Join(t.TempDir(), "tok")})
+	if err := ch.relogin(context.Background()); err != nil {
+		t.Fatalf("relogin: %v", err)
+	}
+	if ch.client.Token() != "tok2" {
+		t.Errorf("token=%q want tok2", ch.client.Token())
+	}
+	if qrCalls < 2 {
+		t.Errorf("expected QR regenerated on expiry, qrCalls=%d", qrCalls)
+	}
+}
+
+func TestQRStatusExpired(t *testing.T) {
+	if !(qrStatusResp{Status: "expired"}).expired() {
+		t.Error("expired status not detected")
+	}
+	if (qrStatusResp{Status: "wait"}).expired() {
+		t.Error("wait should not be expired")
+	}
+}
+
 func TestReloginCtxCancel(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(qrCodeResp{QRCode: "k", QRCodeImgContent: "https://liteapp/q/x"})

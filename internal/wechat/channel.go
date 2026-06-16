@@ -11,8 +11,9 @@ import (
 const (
 	// 登录扫码轮询参数。
 	qrPollInterval = 2 * time.Second
-	qrPollTimeout  = 3 * time.Minute
-	// getupdates 出错后的退避。
+	// 二维码刷新间隔:略短于 ClawBot 端 ~3min 过期,到点自动换新码,避免用户赛跑。
+	qrRefreshInterval = 100 * time.Second
+	// getupdates / 出码出错后的退避。
 	pollBackoff = 3 * time.Second
 )
 
@@ -98,37 +99,54 @@ func (c *Channel) ensureLogin(ctx context.Context) error {
 }
 
 // relogin 走完整扫码登录流程并持久化新 token。
+// 二维码到点(qrRefreshInterval)或被服务端判过期会自动重新出码,持续循环直到扫码成功或 ctx 取消。
 func (c *Channel) relogin(ctx context.Context) error {
 	c.client.SetToken("")
-	qr, err := c.client.GetBotQRCode(ctx)
-	if err != nil {
-		return err
-	}
-	printQRCode(qr)
-
-	deadline := time.Now().Add(qrPollTimeout)
-	for time.Now().Before(deadline) {
-		if !sleepCtx(ctx, qrPollInterval) {
+	for {
+		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		st, err := c.client.GetQRCodeStatus(ctx, qr.pollKey())
+		qr, err := c.client.GetBotQRCode(ctx)
 		if err != nil {
-			log.Printf("[wechat] 查询扫码状态出错: %v", err)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Printf("[wechat] 获取二维码失败,%s 后重试: %v", pollBackoff, err)
+			if !sleepCtx(ctx, pollBackoff) {
+				return ctx.Err()
+			}
 			continue
 		}
-		if st.confirmed() {
-			token := st.token()
-			if st.baseURL() != "" {
-				c.client = NewClient(st.baseURL())
+		printQRCode(qr)
+
+		refreshAt := time.Now().Add(qrRefreshInterval)
+		for time.Now().Before(refreshAt) {
+			if !sleepCtx(ctx, qrPollInterval) {
+				return ctx.Err()
 			}
-			c.client.SetToken(token)
-			if err := saveToken(c.tokenPath, token); err != nil {
-				log.Printf("[wechat] 保存 token 失败(不影响本次运行): %v", err)
+			st, err := c.client.GetQRCodeStatus(ctx, qr.pollKey())
+			if err != nil {
+				log.Printf("[wechat] 查询扫码状态出错: %v", err)
+				continue
 			}
-			return nil
+			if st.confirmed() {
+				token := st.token()
+				if st.baseURL() != "" {
+					c.client = NewClient(st.baseURL())
+				}
+				c.client.SetToken(token)
+				if err := saveToken(c.tokenPath, token); err != nil {
+					log.Printf("[wechat] 保存 token 失败(不影响本次运行): %v", err)
+				}
+				return nil
+			}
+			if st.expired() {
+				log.Printf("[wechat] 二维码已过期,自动重新出码")
+				break
+			}
 		}
+		log.Printf("[wechat] 二维码刷新,重新出码")
 	}
-	return context.DeadlineExceeded
 }
 
 // sleepCtx 睡眠 d,期间 ctx 取消则提前返回 false。
