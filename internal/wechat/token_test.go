@@ -49,4 +49,10 @@ func TestTextMessage(t *testing.T) {
 	if m.MessageType != msgTypeReply || m.MessageState != msgStateFinal {
 		t.Errorf("unexpected type/state: %+v", m)
 	}
+	if m.ClientID == "" {
+		t.Error("client_id must be set on outbound messages")
+	}
+	if m2 := textMessage("u", "c", "hi"); m2.ClientID == m.ClientID {
+		t.Error("client_id must be unique per message")
+	}
 }

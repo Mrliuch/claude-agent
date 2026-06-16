@@ -1,6 +1,10 @@
 package wechat
 
-import "strings"
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"strings"
+)
 
 // iLink 消息项类型。当前 ClawBot 仅支持文本(type=1)。
 const itemTypeText = 1
@@ -28,6 +32,7 @@ type Item struct {
 type Message struct {
 	FromUserID   string `json:"from_user_id,omitempty"`
 	ToUserID     string `json:"to_user_id,omitempty"`
+	ClientID     string `json:"client_id,omitempty"` // 出站消息必需:每条唯一,缺失会被 ClawBot 静默丢弃
 	MessageType  int    `json:"message_type,omitempty"`
 	MessageState int    `json:"message_state,omitempty"`
 	ContextToken string `json:"context_token,omitempty"`
@@ -45,15 +50,23 @@ func (m Message) Text() string {
 	return b.String()
 }
 
-// textMessage 构造一条文本回复消息。
+// textMessage 构造一条文本回复消息(含唯一 client_id)。
 func textMessage(toUser, contextToken, text string) Message {
 	return Message{
 		ToUserID:     toUser,
+		ClientID:     newClientID(),
 		MessageType:  msgTypeReply,
 		MessageState: msgStateFinal,
 		ContextToken: contextToken,
 		ItemList:     []Item{{Type: itemTypeText, TextItem: &TextItem{Text: text}}},
 	}
+}
+
+// newClientID 生成每条出站消息唯一的 client_id(ClawBot 用作幂等/去重键)。
+func newClientID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return "claude-agent-" + hex.EncodeToString(b)
 }
 
 // --- 请求/响应包体 ---
@@ -73,7 +86,8 @@ type getUpdatesResp struct {
 }
 
 type sendMessageReq struct {
-	Msg Message `json:"msg"`
+	Msg      Message  `json:"msg"`
+	BaseInfo baseInfo `json:"base_info"`
 }
 
 // sendTypingReq 控制"正在输入"状态;status:1=开始,2=结束。

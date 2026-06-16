@@ -162,7 +162,10 @@ func (c *Client) GetUpdates(ctx context.Context, cursor string) (getUpdatesResp,
 
 // SendMessage 发送一条文本回复。
 func (c *Client) SendMessage(ctx context.Context, toUser, contextToken, text string) error {
-	body := sendMessageReq{Msg: textMessage(toUser, contextToken, text)}
+	body := sendMessageReq{
+		Msg:      textMessage(toUser, contextToken, text),
+		BaseInfo: baseInfo{ChannelVersion: channelVersion},
+	}
 	req, err := c.newRequest(ctx, http.MethodPost, "/ilink/bot/sendmessage", body)
 	if err != nil {
 		return err
