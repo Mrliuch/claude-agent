@@ -45,6 +45,9 @@ const (
 // sendTimeout 单条 sendmessage 的超时。
 const sendTimeout = 15 * time.Second
 
+// typingInterval 处理中续"正在输入"的间隔(略短于微信端 ~10s 的 typing 失效,保持回复窗口打开)。
+const typingInterval = 6 * time.Second
+
 // userSession 对应一个微信用户的一条 claude 会话(= 一个 claude 子进程)。
 type userSession struct {
 	userID string
@@ -56,6 +59,9 @@ type userSession struct {
 	pKind        pendingKind
 	pReqID       string
 	pQuestions   []any
+	ticket       string        // typing_ticket(getconfig 缓存)
+	busy         bool          // claude 正在处理本轮,期间需 typing 保活
+	quit         chan struct{} // 会话结束信号,停掉 keepalive
 }
 
 // sessionManager 管理 from_user_id → userSession 映射,含并发上限与空闲回收。
@@ -104,6 +110,7 @@ func (sm *sessionManager) Dispatch(msg Message) {
 
 	if created {
 		// 新会话:首条消息直接作为用户输入发给 claude。
+		sm.markBusy(us)
 		_ = us.br.SendUserMessage(text)
 		return
 	}
@@ -114,7 +121,72 @@ func (sm *sessionManager) Dispatch(msg Message) {
 	case pendingQuestion:
 		sm.handleQuestionReply(us, text)
 	default:
+		sm.markBusy(us)
 		_ = us.br.SendUserMessage(text)
+	}
+}
+
+// markBusy 标记会话进入处理中,并立即发一次 typing 保活(随后由 keepalive 维持)。
+func (sm *sessionManager) markBusy(us *userSession) {
+	us.mu.Lock()
+	us.busy = true
+	us.mu.Unlock()
+	go sm.poke(us)
+}
+
+// poke 确保拿到 typing_ticket 并发一次 sendtyping(status:1)。
+func (sm *sessionManager) poke(us *userSession) {
+	ticket := sm.ensureTicket(us)
+	if ticket == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(sm.ctx, sendTimeout)
+	defer cancel()
+	_ = sm.client.SendTyping(ctx, us.userID, ticket, 1)
+}
+
+// ensureTicket 返回缓存的 typing_ticket,无则通过 getconfig 获取并缓存。
+func (sm *sessionManager) ensureTicket(us *userSession) string {
+	us.mu.Lock()
+	t := us.ticket
+	us.mu.Unlock()
+	if t != "" {
+		return t
+	}
+	ctx, cancel := context.WithTimeout(sm.ctx, sendTimeout)
+	defer cancel()
+	t, err := sm.client.GetConfig(ctx, us.userID)
+	if err != nil {
+		log.Printf("[wechat] getconfig 失败 user=%s: %v", us.userID, err)
+		return ""
+	}
+	us.mu.Lock()
+	us.ticket = t
+	us.mu.Unlock()
+	return t
+}
+
+// typingKeepalive 在会话处理中每隔 typingInterval 续一次"正在输入",保持回复窗口打开。
+func (sm *sessionManager) typingKeepalive(us *userSession) {
+	t := time.NewTicker(typingInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-us.quit:
+			return
+		case <-sm.ctx.Done():
+			return
+		case <-t.C:
+			us.mu.Lock()
+			busy := us.busy
+			ticket := us.ticket
+			us.mu.Unlock()
+			if busy && ticket != "" {
+				ctx, cancel := context.WithTimeout(sm.ctx, sendTimeout)
+				_ = sm.client.SendTyping(ctx, us.userID, ticket, 1)
+				cancel()
+			}
+		}
 	}
 }
 
@@ -129,6 +201,7 @@ func (sm *sessionManager) handlePermissionReply(us *userSession, text string) {
 	us.pKind = pendingNone
 	us.pReqID = ""
 	us.mu.Unlock()
+	sm.markBusy(us)
 	_ = us.br.RespondPermission(reqID, allow, nil)
 }
 
@@ -148,6 +221,7 @@ func (sm *sessionManager) handleQuestionReply(us *userSession, text string) {
 	us.pReqID = ""
 	us.pQuestions = nil
 	us.mu.Unlock()
+	sm.markBusy(us)
 	_ = us.br.RespondAskUserQuestion(reqID, answers)
 }
 
@@ -166,15 +240,26 @@ func (sm *sessionManager) getOrCreate(userID string) (us *userSession, created b
 		log.Printf("[wechat] 启动 claude 失败 user=%s: %v", userID, err)
 		return nil, false
 	}
-	us = &userSession{userID: userID, br: br, lastActive: time.Now()}
+	us = &userSession{userID: userID, br: br, lastActive: time.Now(), quit: make(chan struct{})}
 	sm.byUser[userID] = us
 	go sm.consume(us)
+	go sm.typingKeepalive(us)
 	return us, true
+}
+
+// setBusy 设置处理中标志。
+func (sm *sessionManager) setBusy(us *userSession, busy bool) {
+	us.mu.Lock()
+	us.busy = busy
+	us.mu.Unlock()
 }
 
 // consume 消费 claude 事件,翻译为微信文本并回发;权限/问卷转入待确认状态。
 func (sm *sessionManager) consume(us *userSession) {
-	defer sm.remove(us.userID)
+	defer func() {
+		close(us.quit) // 停掉 typing keepalive
+		sm.remove(us.userID)
+	}()
 	for ev := range us.br.Events() {
 		switch ev["type"] {
 		case "permission_request":
@@ -189,6 +274,7 @@ func (sm *sessionManager) consume(us *userSession) {
 			us.pReqID = reqID
 			us.mu.Unlock()
 			sm.send(us.userID, us.token(), renderPermissionPrompt(ev))
+			sm.setBusy(us, false) // 转为等待用户确认,暂停 typing
 		case "user_question":
 			questions, _ := ev["questions"].([]any)
 			us.mu.Lock()
@@ -197,12 +283,29 @@ func (sm *sessionManager) consume(us *userSession) {
 			us.pQuestions = questions
 			us.mu.Unlock()
 			sm.send(us.userID, us.token(), renderQuestionPrompt(questions))
+			sm.setBusy(us, false)
+		case "result":
+			sm.setBusy(us, false) // 本轮结束,停 typing
+			sm.stopTyping(us)
 		default:
 			if text := renderEvent(ev); text != "" {
 				sm.send(us.userID, us.token(), text)
 			}
 		}
 	}
+}
+
+// stopTyping 发送 sendtyping(status:2) 取消"正在输入"。
+func (sm *sessionManager) stopTyping(us *userSession) {
+	us.mu.Lock()
+	ticket := us.ticket
+	us.mu.Unlock()
+	if ticket == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(sm.ctx, sendTimeout)
+	defer cancel()
+	_ = sm.client.SendTyping(ctx, us.userID, ticket, 2)
 }
 
 // token 返回该用户最近一次消息的 context_token。

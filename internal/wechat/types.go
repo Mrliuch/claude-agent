@@ -77,10 +77,22 @@ type sendMessageReq struct {
 }
 
 // sendTypingReq 控制"正在输入"状态;status:1=开始,2=结束。
+// 需带 getconfig 返回的 typing_ticket(已抓包核实)。
 type sendTypingReq struct {
-	ToUserID     string `json:"to_user_id"`
-	ContextToken string `json:"context_token,omitempty"`
+	IlinkUserID  string `json:"ilink_user_id"`
+	TypingTicket string `json:"typing_ticket"`
 	Status       int    `json:"status"`
+}
+
+// getConfigReq/Resp:按 ilink_user_id 取 typing_ticket(typing 保活必需)。
+type getConfigReq struct {
+	IlinkUserID string   `json:"ilink_user_id"`
+	BaseInfo    baseInfo `json:"base_info"`
+}
+
+type getConfigResp struct {
+	Ret          int    `json:"ret"`
+	TypingTicket string `json:"typing_ticket"`
 }
 
 // qrCodeResp 扫码登录第一步返回。真实字段(已抓包核实):

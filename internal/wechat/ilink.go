@@ -170,9 +170,24 @@ func (c *Client) SendMessage(ctx context.Context, toUser, contextToken, text str
 	return c.do(c.httpc, req, nil)
 }
 
+// GetConfig 取某用户的 typing_ticket(typing 保活必需)。
+func (c *Client) GetConfig(ctx context.Context, ilinkUserID string) (string, error) {
+	body := getConfigReq{IlinkUserID: ilinkUserID, BaseInfo: baseInfo{ChannelVersion: channelVersion}}
+	req, err := c.newRequest(ctx, http.MethodPost, "/ilink/bot/getconfig", body)
+	if err != nil {
+		return "", err
+	}
+	var out getConfigResp
+	if err := c.do(c.httpc, req, &out); err != nil {
+		return "", err
+	}
+	return out.TypingTicket, nil
+}
+
 // SendTyping 设置"正在输入"状态(status:1 开始 / 2 结束);失败不致命,调用方可忽略。
-func (c *Client) SendTyping(ctx context.Context, toUser, contextToken string, status int) error {
-	body := sendTypingReq{ToUserID: toUser, ContextToken: contextToken, Status: status}
+// typing 保活让长耗时回复仍落在 ClawBot 的回复窗口内,避免静默丢弃。
+func (c *Client) SendTyping(ctx context.Context, ilinkUserID, typingTicket string, status int) error {
+	body := sendTypingReq{IlinkUserID: ilinkUserID, TypingTicket: typingTicket, Status: status}
 	req, err := c.newRequest(ctx, http.MethodPost, "/ilink/bot/sendtyping", body)
 	if err != nil {
 		return err

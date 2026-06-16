@@ -68,10 +68,17 @@ func newTestManager(t *testing.T, maxSess int) (*sessionManager, *fakeBridge, ch
 	t.Helper()
 	sent := make(chan string, 16)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body sendMessageReq
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		sent <- body.Msg.Text()
-		w.Write([]byte(`{}`))
+		switch {
+		case r.URL.Path == "/ilink/bot/sendmessage":
+			var body sendMessageReq
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			sent <- body.Msg.Text()
+			w.Write([]byte(`{}`))
+		case r.URL.Path == "/ilink/bot/getconfig":
+			_ = json.NewEncoder(w).Encode(getConfigResp{TypingTicket: "tkt"})
+		default: // sendtyping 等
+			w.Write([]byte(`{"ret":0}`))
+		}
 	}))
 	t.Cleanup(srv.Close)
 

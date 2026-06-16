@@ -20,7 +20,7 @@ func TestNewRequestHeaders(t *testing.T) {
 
 	c := NewClient(srv.URL)
 	c.SetToken("tok-xyz")
-	if err := c.SendTyping(context.Background(), "u", "ctx", 1); err != nil {
+	if err := c.SendTyping(context.Background(), "u@im.wechat", "ticket-1", 1); err != nil {
 		t.Fatalf("SendTyping: %v", err)
 	}
 	if got.Header.Get("Authorization") != "Bearer tok-xyz" {
