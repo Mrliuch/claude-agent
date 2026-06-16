@@ -5,7 +5,17 @@ import (
 	"os"
 
 	"github.com/mdp/qrterminal/v3"
+	"rsc.io/qr"
 )
+
+// QRPNG 把二维码内容编码为 PNG 字节,供 Web 页面 <img> 显示。
+func QRPNG(content string) ([]byte, error) {
+	code, err := qr.Encode(content, qr.M)
+	if err != nil {
+		return nil, err
+	}
+	return code.PNG(), nil
+}
 
 // printQRCode 在终端渲染登录二维码,供用户用微信扫码授权。
 // 优先渲染二维码内容(qr.QRCode),回退到 URL;两者都打印明文便于排查。

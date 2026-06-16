@@ -31,16 +31,18 @@ func main() {
 		log.Fatal("[claude-agent] 必须设置环境变量 AGENT_TOKEN（共享鉴权 token，客户端需携带）")
 	}
 
-	// 微信 ClawBot 通道为可选项,默认关闭;开启时与 HTTP 服务并行运行,互不影响。
+	srv := server.NewServer(cfg)
+
+	// 微信 ClawBot 多账号通道为可选项,默认关闭;开启时与 HTTP 服务并行,互不影响。
+	// 已保存的账号在启动时自动恢复登录;新账号经 Web 控制台扫码添加。
 	if cfg.WeChatEnabled {
-		go func() {
-			if err := wechat.NewChannel(cfg).Run(context.Background()); err != nil {
-				log.Printf("[claude-agent] 微信通道退出: %v", err)
-			}
-		}()
+		mgr := wechat.NewManager(context.Background(), cfg)
+		mgr.Restore()
+		srv.SetWeChat(mgr)
+		log.Printf("[claude-agent] 微信多账号通道已启用")
 	}
 
-	if err := server.NewServer(cfg).Run(); err != nil {
+	if err := srv.Run(); err != nil {
 		log.Fatalf("[claude-agent] 服务退出: %v", err)
 	}
 }

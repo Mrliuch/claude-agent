@@ -3,6 +3,7 @@ package wechat
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
 	"claude-agent/internal/config"
@@ -17,26 +18,75 @@ const (
 	pollBackoff = 3 * time.Second
 )
 
-// Channel 是微信 ClawBot 接入通道:扫码登录 → 长轮询 → 分发到会话。
+// 账号状态。
+const (
+	StatusPending = "pending" // 等待扫码
+	StatusOnline  = "online"  // 已登录,正常收发
+	StatusOffline = "offline" // 未登录/已退出
+)
+
+// Channel 是一个微信 ClawBot 账号的接入通道:扫码登录 → 长轮询 → 分发到会话。
 type Channel struct {
+	id        string
+	name      string
 	cfg       config.Config
 	client    *Client
 	tokenPath string
 	newBridge bridgeFactory // 可注入,便于测试;默认 defaultBridgeFactory
+
+	mu        sync.Mutex
+	status    string
+	qrContent string // 当前待扫码的二维码内容(scanContent),在线后清空
 }
 
-// NewChannel 按配置构造通道。
+// NewChannel 按配置构造单账号通道(向后兼容)。
 func NewChannel(cfg config.Config) *Channel {
 	tokenPath := cfg.WeChatTokenPath
 	if tokenPath == "" {
 		tokenPath = defaultTokenPath()
 	}
+	return newAccountChannel(cfg, "default", "默认账号", tokenPath)
+}
+
+// newAccountChannel 构造一个带 id/name/独立 token 路径的账号通道。
+func newAccountChannel(cfg config.Config, id, name, tokenPath string) *Channel {
 	return &Channel{
+		id:        id,
+		name:      name,
 		cfg:       cfg,
 		client:    NewClient(cfg.WeChatBaseURL),
 		tokenPath: tokenPath,
 		newBridge: defaultBridgeFactory,
+		status:    StatusOffline,
 	}
+}
+
+// ID/Name/Status/QR 暴露给管理层与 HTTP。
+func (c *Channel) ID() string   { return c.id }
+func (c *Channel) Name() string { return c.name }
+
+func (c *Channel) Status() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.status
+}
+
+func (c *Channel) QR() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.qrContent
+}
+
+func (c *Channel) setStatus(s string) {
+	c.mu.Lock()
+	c.status = s
+	c.mu.Unlock()
+}
+
+func (c *Channel) setQR(content string) {
+	c.mu.Lock()
+	c.qrContent = content
+	c.mu.Unlock()
 }
 
 // Run 启动通道,阻塞直到 ctx 取消。
@@ -51,12 +101,15 @@ func (c *Channel) Run(ctx context.Context) error {
 	}
 	go sm.reapLoop()
 	defer sm.closeAll()
+	defer c.setStatus(StatusOffline)
 
 	if err := c.ensureLogin(ctx); err != nil {
 		return err
 	}
+	c.setStatus(StatusOnline)
+	c.setQR("")
 
-	log.Printf("[wechat] 登录成功，开始接收消息")
+	log.Printf("[wechat] 账号 %s 登录成功，开始接收消息", c.id)
 	var cursor string
 	for {
 		if ctx.Err() != nil {
@@ -68,10 +121,12 @@ func (c *Channel) Run(ctx context.Context) error {
 				return ctx.Err()
 			}
 			if err == ErrUnauthorized {
-				log.Printf("[wechat] token 失效，重新登录")
+				log.Printf("[wechat] 账号 %s token 失效，重新登录", c.id)
+				c.setStatus(StatusPending)
 				if lerr := c.relogin(ctx); lerr != nil {
 					return lerr
 				}
+				c.setStatus(StatusOnline)
 				cursor = ""
 				continue
 			}
@@ -102,6 +157,7 @@ func (c *Channel) ensureLogin(ctx context.Context) error {
 // 二维码到点(qrRefreshInterval)或被服务端判过期会自动重新出码,持续循环直到扫码成功或 ctx 取消。
 func (c *Channel) relogin(ctx context.Context) error {
 	c.client.SetToken("")
+	c.setStatus(StatusPending)
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -117,7 +173,8 @@ func (c *Channel) relogin(ctx context.Context) error {
 			}
 			continue
 		}
-		printQRCode(qr)
+		c.setQR(qr.scanContent()) // 暴露给 Web 页面渲染二维码
+		printQRCode(qr)           // 同时打日志(单账号/无页面场景)
 
 		refreshAt := time.Now().Add(qrRefreshInterval)
 		for time.Now().Before(refreshAt) {
@@ -135,6 +192,7 @@ func (c *Channel) relogin(ctx context.Context) error {
 					c.client = NewClient(st.baseURL())
 				}
 				c.client.SetToken(token)
+				c.setQR("")
 				if err := saveToken(c.tokenPath, token); err != nil {
 					log.Printf("[wechat] 保存 token 失败(不影响本次运行): %v", err)
 				}
