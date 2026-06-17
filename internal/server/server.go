@@ -156,6 +156,18 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		cfg.WorkDir = dir
 	}
 
+	// 按连接注入用户私有凭据（来自上游中继的握手 Header）：非空则经 --settings 临时文件
+	// 覆盖该连接 claude 子进程的 ANTHROPIC_* 配置，实现每用户独立 token；为空则用共享默认。
+	if v := strings.TrimSpace(r.Header.Get("X-Claude-Auth-Token")); v != "" {
+		cfg.ClaudeAuthToken = v
+	}
+	if v := strings.TrimSpace(r.Header.Get("X-Claude-Base-Url")); v != "" {
+		cfg.ClaudeBaseURL = v
+	}
+	if v := strings.TrimSpace(r.Header.Get("X-Claude-Model")); v != "" {
+		cfg.Model = v
+	}
+
 	b := bridge.NewBridge(cfg)
 	if err := b.Start(); err != nil {
 		_ = conn.WriteJSON(map[string]any{"type": "error", "msg": "启动 claude 失败: " + err.Error()})

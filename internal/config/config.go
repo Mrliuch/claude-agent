@@ -22,6 +22,11 @@ type Config struct {
 	WeChatTokenPath   string // bot_token 持久化路径，留空用 ~/.config/claude-agent/wechat_token
 	WeChatBaseURL     string // iLink 接入域名，留空用官方默认；用于测试 mock
 	WeChatMaxSessions int    // 并发微信会话上限（每会话=1 个 claude 子进程），默认 20
+
+	// 以下为「按连接」注入的字段，不来自 env，由调用方（如上游中继服务）按请求写入。
+	ClaudeAuthToken      string // 用户私有 ANTHROPIC_AUTH_TOKEN，非空时经 --settings 注入该连接的 claude 子进程
+	ClaudeBaseURL        string // 用户私有 ANTHROPIC_BASE_URL，留空走宿主配置或官方端点
+	DisableBackgroundTasks bool // 禁用 Bash run_in_background（CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1）
 }
 
 // LoadConfig 从环境变量读取配置并填充默认值。
@@ -40,6 +45,8 @@ func LoadConfig() Config {
 		WeChatTokenPath:   os.Getenv("AGENT_WECHAT_TOKEN_PATH"),
 		WeChatBaseURL:     os.Getenv("AGENT_WECHAT_BASEURL"),
 		WeChatMaxSessions: envInt("AGENT_WECHAT_MAX_SESSIONS", 20),
+
+		DisableBackgroundTasks: envOr("CLAUDE_DISABLE_BACKGROUND_TASKS", "off") == "on",
 	}
 }
 

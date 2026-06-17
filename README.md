@@ -33,6 +33,9 @@ VM。`claude-agent` 给那台机器一个轻量、可审计的远程操控面：
 - **带围栏的文件管理** —— 在工作目录内浏览 / 查看 / 下载 / 上传，严格路径围栏（`..` 越界、
   软链逃逸都拦死）。
 - **可嵌入** —— 同一个 WebSocket 端点也能藏在你自己的鉴权中继后端之后，不必直接暴露代理。
+- **每用户独立凭据** —— 中继后端可在 WebSocket 升级请求里注入 `X-Claude-Auth-Token` /
+  `X-Claude-Base-Url` / `X-Claude-Model` 请求头，agent 为该连接的 `claude` 子进程生成临时
+  `--settings` 文件（0600，连接关闭即删），覆盖认证 token 与端点；用户未配置则沿用宿主共享凭据。
 
 ---
 
@@ -79,6 +82,7 @@ AGENT_TOKEN=$(openssl rand -hex 24) ./claude-agent
 | `CLAUDE_PERMISSION_MODE` | 传给 `claude --permission-mode`。保持 `default` 才会弹窗确认危险操作。 | `default` |
 | `CLAUDE_IDLE_TIMEOUT` | 空闲多少秒后回收会话（及 `claude` 子进程）。`0` = 禁用。 | `1800` |
 | `AGENT_DEBUG` | 设为任意值则打印原始桥接流量日志。 | _(空)_ |
+| `CLAUDE_DISABLE_BACKGROUND_TASKS` | 设为 `on` 则注入 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`，禁用 Bash `run_in_background`。推荐在中继模式（代理后端）下开启：后台任务输出文件留在目标机，连接断开即杀进程，完成通知不可靠。 | `off` |
 | `AGENT_WECHAT` | 设为 `on` 启用[微信 ClawBot 接入](#微信-clawbot-接入多账号)。 | `off` |
 | `AGENT_WECHAT_TOKEN_PATH` | 微信账号 token 存放目录。 | `~/.config/claude-agent/wechat/` |
 | `AGENT_WECHAT_BASEURL` | iLink 接入域名（一般无需改，便于测试 mock）。 | `https://ilinkai.weixin.qq.com` |

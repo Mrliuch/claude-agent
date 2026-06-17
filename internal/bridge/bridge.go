@@ -23,6 +23,8 @@ type Bridge struct {
 	stdin  io.WriteCloser
 	events chan map[string]any
 
+	settingsPath string // 本连接用户私有凭据写出的临时 --settings 文件（Close 时删除）
+
 	writeMu    sync.Mutex
 	closeOnce  sync.Once
 	reqCounter int
@@ -44,10 +46,21 @@ func (b *Bridge) Events() <-chan map[string]any {
 
 // Start 拉起 claude 子进程并发送 initialize 握手。
 func (b *Bridge) Start() error {
+	// 有用户私有凭据时，写出一个 --settings 文件覆盖 claude 鉴权。
+	// 注意：进程 env 会被宿主 ~/.claude/settings.json 的 env 块压制（真机核实），
+	// 因此必须走 --settings（优先级高于用户 settings.json）才能让用户 token 生效。
+	if b.cfg.ClaudeAuthToken != "" {
+		path, err := writeUserSettings(b.cfg)
+		if err != nil {
+			return fmt.Errorf("写出用户 settings 失败: %w", err)
+		}
+		b.settingsPath = path
+	}
+
 	args := b.buildArgs()
 	b.cmd = exec.Command(args[0], args[1:]...)
 	b.cmd.Dir = b.cfg.ResolvedWorkDir()
-	b.cmd.Env = filteredEnv()
+	b.cmd.Env = filteredEnv(b.cfg)
 
 	stdin, err := b.cmd.StdinPipe()
 	if err != nil {
@@ -81,6 +94,10 @@ func (b *Bridge) buildArgs() []string {
 		"--verbose",
 		"--permission-mode", orDefault(b.cfg.PermissionMode, "default"),
 		"--permission-prompt-tool", "stdio",
+	}
+	// 用户私有凭据：以 --settings 注入（优先级高于宿主 ~/.claude/settings.json 的 env）
+	if b.settingsPath != "" {
+		args = append(args, "--settings", b.settingsPath)
 	}
 	if b.cfg.Model != "" {
 		args = append(args, "--model", b.cfg.Model)
@@ -285,10 +302,13 @@ func (b *Bridge) Close() {
 		if b.stdin != nil {
 			_ = b.stdin.Close()
 		}
+		if b.settingsPath != "" {
+			_ = os.Remove(b.settingsPath) // 清理含明文 token 的临时 settings
+		}
 	})
 }
 
-func filteredEnv() []string {
+func filteredEnv(cfg config.Config) []string {
 	var out []string
 	for _, kv := range os.Environ() {
 		if strings.HasPrefix(kv, "CLAUDECODE=") {
@@ -297,6 +317,11 @@ func filteredEnv() []string {
 		out = append(out, kv)
 	}
 	out = append(out, "CLAUDE_CODE_ENTRYPOINT=claude-agent")
+	// 禁用 Bash run_in_background：跨机中继架构下后台任务输出文件在目标机、
+	// 连接断开即杀 claude 进程，完成通知不可靠；长任务用 shell 级 nohup & 替代。
+	if cfg.DisableBackgroundTasks {
+		out = append(out, "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1")
+	}
 	return out
 }
 
