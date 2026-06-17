@@ -46,6 +46,7 @@ func NewServer(cfg config.Config) *Server {
 func (s *Server) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealth)
+	mux.HandleFunc("/agent/version", s.handleVersion)
 	mux.HandleFunc("/agent/chat", s.handleChat)
 	mux.HandleFunc("/agent/fs/list", s.handleFsList)
 	mux.HandleFunc("/agent/fs/read", s.handleFsRead)
@@ -131,6 +132,15 @@ func (s *Server) handleLogout(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	v := s.cfg.Version
+	if v == "" {
+		v = "unknown"
+	}
+	_ = json.NewEncoder(w).Encode(map[string]string{"version": v})
 }
 
 // handleChat 升级为 WebSocket，鉴权后桥接到本机 claude。

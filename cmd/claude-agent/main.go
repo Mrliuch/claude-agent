@@ -20,21 +20,19 @@ import (
 var version = "dev"
 
 func main() {
-	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-		log.SetFlags(0)
-		log.Printf("claude-agent %s", version)
-		return
+	cfg, ok := config.ParseArgs(os.Args[1:], version)
+	if !ok {
+		os.Exit(0)
 	}
+
 	log.Printf("[claude-agent] version %s", version)
-	cfg := config.LoadConfig()
+
 	if cfg.Token == "" {
-		log.Fatal("[claude-agent] 必须设置环境变量 AGENT_TOKEN（共享鉴权 token，客户端需携带）")
+		log.Fatal("[claude-agent] 必须设置 AGENT_TOKEN 或 --token（共享鉴权 token，客户端需携带）")
 	}
 
 	srv := server.NewServer(cfg)
 
-	// 微信 ClawBot 多账号通道为可选项,默认关闭;开启时与 HTTP 服务并行,互不影响。
-	// 已保存的账号在启动时自动恢复登录;新账号经 Web 控制台扫码添加。
 	if cfg.WeChatEnabled {
 		mgr := wechat.NewManager(context.Background(), cfg)
 		mgr.Restore()
