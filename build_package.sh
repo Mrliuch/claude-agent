@@ -15,16 +15,17 @@ command -v go >/dev/null || { echo "[打包失败] 未找到 Go，请先安装 g
 
 GOOS="${GOOS:-linux}"
 GOARCH="${GOARCH:-amd64}"
+VERSION="${VERSION:-$(git describe --tags --always 2>/dev/null || echo dev)}"
 OUT_DIR=dist
 PKG="claude-agent-${GOOS}-${GOARCH}.tar.gz"
 
-echo "[打包] 编译 claude-agent (${GOOS}/${GOARCH})..."
+echo "[打包] 编译 claude-agent (${GOOS}/${GOARCH}) version=${VERSION}..."
 mkdir -p "$OUT_DIR"
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 
 CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath \
-    -ldflags "-s -w" -o "$STAGE/claude-agent" ./cmd/claude-agent/
+    -ldflags "-s -w -X main.version=${VERSION}" -o "$STAGE/claude-agent" ./cmd/claude-agent/
 install -m 0755 install.sh "$STAGE/install.sh"
 
 tar -czf "$OUT_DIR/$PKG" -C "$STAGE" claude-agent install.sh
