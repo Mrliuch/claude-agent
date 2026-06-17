@@ -23,18 +23,31 @@ jobs:
           go vet ./...
           go test ./...
 
-      - name: Cross-compile all platforms
+      - name: Build packages
         env:
           CGO_ENABLED: "0"
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME}"
           mkdir -p dist
+
+          # linux 安装包（含 install.sh，供运维平台 /api/ai/agent-package 下载及 Docker 镜像打包）
+          # 命名格式与 build_package.sh 一致：claude-agent-linux-{arch}.tar.gz
+          for arch in amd64 arm64; do
+            echo ">> building linux/${arch} install package"
+            GOOS=linux GOARCH=${arch} go build -trimpath \
+              -ldflags "-s -w -X main.version=${VERSION}" \
+              -o claude-agent ./cmd/claude-agent
+            tar -czf "dist/claude-agent-linux-${arch}.tar.gz" claude-agent install.sh
+            rm -f claude-agent
+          done
+
+          # 全平台通用包（含 README / LICENSE，供用户手动下载）
           platforms="linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64"
           for p in $platforms; do
             os="${p%/*}"; arch="${p#*/}"
             bin="claude-agent"; [ "$os" = "windows" ] && bin="claude-agent.exe"
-            echo ">> building $os/$arch"
+            echo ">> building ${os}/${arch}"
             GOOS="$os" GOARCH="$arch" go build -trimpath \
               -ldflags "-s -w -X main.version=${VERSION}" -o "$bin" ./cmd/claude-agent
             base="claude-agent_${VERSION}_${os}_${arch}"
@@ -45,8 +58,9 @@ jobs:
             fi
             rm -f "$bin"
           done
+
           ( cd dist && sha256sum * > checksums.txt )
-          echo "=== artifacts ==="; ls -la dist
+          echo "=== artifacts ==="; ls -lh dist
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
