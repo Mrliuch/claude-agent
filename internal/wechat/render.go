@@ -172,6 +172,17 @@ func questionOptions(qm map[string]any) []string {
 	return labels
 }
 
+// resetCommands 是主动重置对话上下文的口令(大小写不敏感,去空白后精确匹配)。
+var resetCommands = map[string]bool{
+	"/new": true, "/reset": true, "/clear": true,
+	"/重置": true, "/清空": true, "/新对话": true, "/新会话": true,
+}
+
+// isResetCommand 判定一条消息是否为重置对话口令。
+func isResetCommand(text string) bool {
+	return resetCommands[strings.ToLower(strings.TrimSpace(text))]
+}
+
 // parsePermissionReply 解析用户对权限确认的回复。
 // 返回 (allow, ok):ok=false 表示无法识别,调用方应提示重答。
 func parsePermissionReply(text string) (allow bool, ok bool) {

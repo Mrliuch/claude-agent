@@ -127,7 +127,13 @@ AGENT_TOKEN=<你的token> AGENT_WECHAT=on ./claude-agent
 
 - **多账号**:每个微信号一套独立 `bot_token`，互不干扰;同一机器人下不同微信用户各自独立 `claude` 会话。
 - **纯文字**:对齐 ClawBot 现状，仅收发文本(图片/语音/文件暂不支持)。
-- **会话回收**:空闲按 `CLAUDE_IDLE_TIMEOUT` 回收 `claude` 子进程。
+- **上下文持久化(跨进程续接)**:每个微信用户的 `claude` `session_id` 落盘(token 同级
+  `sessions/<账号id>/` 目录,0600)。空闲回收 / `claude` 进程结束 / **agent 重启**后,用户下条
+  消息会自动 `--resume` 续接**同一上下文**,历史不丢。旧 `session_id` 失效时自动降级为新会话
+  并提示"上下文已重置",不会卡住。
+- **主动重置对话**:用户发 `/new`、`/reset`、`/clear`、`/重置`、`/清空`、`/新对话`、`/新会话`
+  任一口令即清空上下文,下条消息开启全新对话。
+- **会话回收**:空闲按 `CLAUDE_IDLE_TIMEOUT` 回收 `claude` 子进程(上下文靠上述持久化保持,不受影响)。
 - **人在回路 + 白名单**:只读巡检命令(`ls`/`df`/`docker ps`/`git log`/`systemctl status` 等)自动放行;
   写/危险操作(`rm`/写重定向/`systemctl restart`/`docker run` 等)才把确认卡片发到微信,
   回复 `y`/`允许` 放行、`n`/`拒绝` 拒绝;`AskUserQuestion` 回复选项编号。

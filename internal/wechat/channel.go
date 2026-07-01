@@ -3,6 +3,7 @@ package wechat
 import (
 	"context"
 	"log"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -61,6 +62,15 @@ func newAccountChannel(cfg config.Config, id, name, tokenPath string) *Channel {
 	}
 }
 
+// sessionDir 返回该账号的 claude session_id 持久化目录:
+// <tokenPath 所在目录>/sessions/<账号id>/(按账号隔离,tokenPath 为空则不持久化)。
+func (c *Channel) sessionDir() string {
+	if c.tokenPath == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(c.tokenPath), "sessions", c.id)
+}
+
 // ID/Name/Status/QR 暴露给管理层与 HTTP。
 func (c *Channel) ID() string   { return c.id }
 func (c *Channel) Name() string { return c.name }
@@ -96,6 +106,7 @@ func (c *Channel) Run(ctx context.Context) error {
 		maxSess = 20
 	}
 	sm := newSessionManager(ctx, c.cfg, c.client, maxSess)
+	sm.sessionDir = c.sessionDir()
 	if c.newBridge != nil {
 		sm.newBridge = c.newBridge
 	}
