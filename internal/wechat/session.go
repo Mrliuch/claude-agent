@@ -48,6 +48,13 @@ const sendTimeout = 15 * time.Second
 // typingInterval 处理中续"正在输入"的间隔(略短于微信端 ~10s 的 typing 失效,保持回复窗口打开)。
 const typingInterval = 6 * time.Second
 
+// permPending 是一条待用户确认的权限请求(FIFO 排队)。
+// claude 一轮内可能连发多个 permission_request,必须逐个确认,不能只记最后一个。
+type permPending struct {
+	reqID  string
+	prompt string // 渲染好的确认提示文本,轮到时再推送给用户
+}
+
 // userSession 对应一个微信用户的一条 claude 会话(= 一个 claude 子进程)。
 type userSession struct {
 	userID string
@@ -57,8 +64,9 @@ type userSession struct {
 	lastActive   time.Time
 	contextToken string
 	pKind        pendingKind
-	pReqID       string
+	pReqID       string        // 问卷(pendingQuestion)的 request_id;权限走 permQueue
 	pQuestions   []any
+	permQueue    []permPending // 待确认权限请求队列(队首为当前正在询问用户的一条)
 	ticket       string        // typing_ticket(getconfig 缓存)
 	busy         bool          // claude 正在处理本轮,期间需 typing 保活
 	quit         chan struct{} // 会话结束信号,停掉 keepalive
@@ -196,13 +204,31 @@ func (sm *sessionManager) handlePermissionReply(us *userSession, text string) {
 		sm.send(us.userID, us.token(), "未识别，请回复 y / 允许 或 n / 拒绝。")
 		return
 	}
+	// 应答队首(用户当前正在确认的那一条),出队;若队列还有下一个则继续询问用户,
+	// 否则清空待确认状态、交回 claude 继续本轮。
 	us.mu.Lock()
-	reqID := us.pReqID
-	us.pKind = pendingNone
-	us.pReqID = ""
+	if len(us.permQueue) == 0 { // 理论不达:pendingPermission 必有队首
+		us.pKind = pendingNone
+		us.mu.Unlock()
+		return
+	}
+	head := us.permQueue[0]
+	us.permQueue = us.permQueue[1:]
+	var next *permPending
+	if len(us.permQueue) > 0 {
+		next = &us.permQueue[0]
+	} else {
+		us.pKind = pendingNone
+	}
 	us.mu.Unlock()
-	sm.markBusy(us)
-	_ = us.br.RespondPermission(reqID, allow, nil)
+
+	_ = us.br.RespondPermission(head.reqID, allow, nil)
+	if next != nil {
+		// 还有排队中的权限请求:推送下一条,继续等用户确认(不解禁发送)。
+		sm.send(us.userID, us.token(), next.prompt)
+		return
+	}
+	sm.markBusy(us) // 队列清空,claude 将继续本轮,恢复 typing 保活
 }
 
 func (sm *sessionManager) handleQuestionReply(us *userSession, text string) {
@@ -269,11 +295,17 @@ func (sm *sessionManager) consume(us *userSession) {
 				_ = us.br.RespondPermission(reqID, true, nil)
 				continue
 			}
+			// 排队:claude 一轮内可能连发多个权限请求,逐个入队,只有队列此前为空
+			// (即无正在询问用户的确认)时才立即推送队首,其余静默排队,前一个应答后再推。
+			prompt := renderPermissionPrompt(ev)
 			us.mu.Lock()
 			us.pKind = pendingPermission
-			us.pReqID = reqID
+			wasEmpty := len(us.permQueue) == 0
+			us.permQueue = append(us.permQueue, permPending{reqID: reqID, prompt: prompt})
 			us.mu.Unlock()
-			sm.send(us.userID, us.token(), renderPermissionPrompt(ev))
+			if wasEmpty {
+				sm.send(us.userID, us.token(), prompt)
+			}
 			sm.setBusy(us, false) // 转为等待用户确认,暂停 typing
 		case "user_question":
 			questions, _ := ev["questions"].([]any)

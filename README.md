@@ -131,6 +131,9 @@ AGENT_TOKEN=<你的token> AGENT_WECHAT=on ./claude-agent
 - **人在回路 + 白名单**:只读巡检命令(`ls`/`df`/`docker ps`/`git log`/`systemctl status` 等)自动放行;
   写/危险操作(`rm`/写重定向/`systemctl restart`/`docker run` 等)才把确认卡片发到微信,
   回复 `y`/`允许` 放行、`n`/`拒绝` 拒绝;`AskUserQuestion` 回复选项编号。
+- **多权限请求排队**:`claude` 一轮内可能连发多个 `permission_request`(如连续 WebSearch),
+  微信通道逐个入队、**一次只问一条**,回复后自动推送下一条,确保每个请求都被应答——
+  避免旧版"只记最后一个 reqID、前面的丢失导致会话卡死"的问题。
 - **送达可靠性**:出站消息带唯一 `client_id` + `base_info`，并在处理期间 `sendtyping` 保活，
   避免回复落在窗口外被静默丢弃。
 

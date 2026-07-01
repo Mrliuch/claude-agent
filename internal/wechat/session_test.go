@@ -144,6 +144,56 @@ func TestPermissionFlow(t *testing.T) {
 	}
 }
 
+// TestMultiplePermissionRequestsQueued 覆盖回归 bug:claude 一轮内连续发出多个
+// permission_request 时,必须逐个排队确认——每个 reqID 都要被应答,不能被后来的覆盖丢失。
+func TestMultiplePermissionRequestsQueued(t *testing.T) {
+	sm, fb, sent, cancel := newTestManager(t, 5)
+	defer cancel()
+
+	sm.Dispatch(Message{FromUserID: "u1", ContextToken: "c1", ItemList: textItems("do it")})
+	<-fb.userMsgs
+
+	// claude 一轮内连发两个危险操作权限请求。
+	fb.events <- map[string]any{
+		"type": "permission_request", "request_id": "req-1",
+		"tool_name": "Bash", "tool_input": map[string]any{"command": "rm -rf /tmp/a"},
+	}
+	fb.events <- map[string]any{
+		"type": "permission_request", "request_id": "req-2",
+		"tool_name": "Bash", "tool_input": map[string]any{"command": "rm -rf /tmp/b"},
+	}
+
+	// 仅应先推送第一条确认(第二条排队,暂不打扰用户)。
+	if prompt := recvString(t, sent); prompt == "" {
+		t.Fatal("expected first permission prompt")
+	}
+
+	// 用户确认第一个 → 应答 req-1,随后自动推送第二条确认。
+	sm.Dispatch(Message{FromUserID: "u1", ContextToken: "c2", ItemList: textItems("y")})
+	select {
+	case p := <-fb.perms:
+		if p.id != "req-1" || !p.allow {
+			t.Fatalf("first ack got %+v want {req-1 true}", p)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("req-1 not answered")
+	}
+	if prompt := recvString(t, sent); prompt == "" {
+		t.Fatal("expected second permission prompt after first ack")
+	}
+
+	// 用户确认第二个 → 应答 req-2(此前会被覆盖丢失,导致会话卡死)。
+	sm.Dispatch(Message{FromUserID: "u1", ContextToken: "c3", ItemList: textItems("y")})
+	select {
+	case p := <-fb.perms:
+		if p.id != "req-2" || !p.allow {
+			t.Fatalf("second ack got %+v want {req-2 true}", p)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("req-2 not answered — queued permission lost (regression)")
+	}
+}
+
 func TestPermissionAutoApprove(t *testing.T) {
 	sm, fb, _, cancel := newTestManager(t, 5)
 	defer cancel()
