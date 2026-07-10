@@ -1,12 +1,14 @@
 package server
 
 import (
+	"bufio"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // handleAICatalog 返回 agent 本机发现的系统级 Skills 与 MCP 名称；只读且不返回密钥。
@@ -38,13 +40,41 @@ func scanSkills(dir, source string) []map[string]string {
 	out := []map[string]string{}
 	for _, e := range entries {
 		if e.IsDir() {
-			if _, err := os.Stat(filepath.Join(dir, e.Name(), "SKILL.md")); err == nil {
-				out = append(out, map[string]string{"name": e.Name(), "source": source})
+			path := filepath.Join(dir, e.Name(), "SKILL.md")
+			if info, err := os.Stat(path); err == nil {
+				out = append(out, map[string]string{"name": e.Name(), "source": source,
+					"description": skillDescription(path), "updated_at": info.ModTime().Format(time.DateTime)})
 			}
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i]["name"] < out[j]["name"] })
 	return out
+}
+
+// skillDescription 优先读取 SKILL.md frontmatter 的 description；没有则取正文首段。
+func skillDescription(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	s := bufio.NewScanner(f)
+	inFront, first := false, ""
+	for s.Scan() {
+		line := strings.TrimSpace(s.Text())
+		if line == "---" {
+			inFront = !inFront
+			continue
+		}
+		if inFront && strings.HasPrefix(strings.ToLower(line), "description:") {
+			return strings.Trim(strings.TrimSpace(strings.SplitN(line, ":", 2)[1]), "\"'")
+		}
+		if !inFront && line != "" && !strings.HasPrefix(line, "#") && !strings.Contains(line, ":") {
+			first = line
+			break
+		}
+	}
+	return first
 }
 
 func scanMCP(path, source string) []map[string]string {
