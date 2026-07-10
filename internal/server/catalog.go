@@ -20,9 +20,14 @@ func (s *Server) handleAICatalog(w http.ResponseWriter, r *http.Request) {
 		root = sub
 	}
 	home, _ := os.UserHomeDir()
-	skills := append(scanSkills(filepath.Join(home, ".claude", "skills"), "系统"), scanSkills(filepath.Join(root, ".claude", "skills"), "工作目录")...)
-	mcp := append(scanMCP(filepath.Join(home, ".claude.json"), "系统"), scanMCP(filepath.Join(root, ".mcp.json"), "工作目录")...)
-	writeJSON(w, 0, "ok", map[string]any{"system_skills": skills, "system_mcp": mcp})
+	// 系统目录与用户工作目录必须分开返回：前端只将 system_* 作为只读配置展示，
+	// user_skills 则是当前用户可编辑的工作区内容。
+	systemSkills := scanSkills(filepath.Join(home, ".claude", "skills"), "系统")
+	userSkills := scanSkills(filepath.Join(root, ".claude", "skills"), "工作目录")
+	systemMCP := scanMCP(filepath.Join(home, ".claude.json"), "系统")
+	writeJSON(w, 0, "ok", map[string]any{
+		"system_skills": systemSkills, "user_skills": userSkills, "system_mcp": systemMCP,
+	})
 }
 
 func scanSkills(dir, source string) []map[string]string {
