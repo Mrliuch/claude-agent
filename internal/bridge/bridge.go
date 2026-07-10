@@ -24,6 +24,7 @@ type Bridge struct {
 	events chan map[string]any
 
 	settingsPath string // 本连接用户私有凭据写出的临时 --settings 文件（Close 时删除）
+	mcpPath      string // 本连接用户 MCP 临时配置（Close 时删除）
 
 	writeMu    sync.Mutex
 	closeOnce  sync.Once
@@ -55,6 +56,13 @@ func (b *Bridge) Start() error {
 			return fmt.Errorf("写出用户 settings 失败: %w", err)
 		}
 		b.settingsPath = path
+	}
+	if b.cfg.UserMCPConfig != "" {
+		path, err := writeUserMCPConfig(b.cfg.UserMCPConfig)
+		if err != nil {
+			return fmt.Errorf("写出用户 MCP 配置失败: %w", err)
+		}
+		b.mcpPath = path
 	}
 
 	args := b.buildArgs()
@@ -98,6 +106,9 @@ func (b *Bridge) buildArgs() []string {
 	// 用户私有凭据：以 --settings 注入（优先级高于宿主 ~/.claude/settings.json 的 env）
 	if b.settingsPath != "" {
 		args = append(args, "--settings", b.settingsPath)
+	}
+	if b.mcpPath != "" {
+		args = append(args, "--mcp-config", b.mcpPath)
 	}
 	if b.cfg.Model != "" {
 		args = append(args, "--model", b.cfg.Model)
@@ -304,6 +315,9 @@ func (b *Bridge) Close() {
 		}
 		if b.settingsPath != "" {
 			_ = os.Remove(b.settingsPath) // 清理含明文 token 的临时 settings
+		}
+		if b.mcpPath != "" {
+			_ = os.Remove(b.mcpPath)
 		}
 	})
 }

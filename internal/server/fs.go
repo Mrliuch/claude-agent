@@ -53,6 +53,17 @@ func (s *Server) safeResolve(rel string) (string, error) {
 	return target, nil
 }
 
+// safeResolveScoped 将客户端相对路径限制在指定工作子目录；为空时保持历史根目录行为。
+func (s *Server) safeResolveScoped(rel, sub string) (string, error) {
+	if sub = strings.TrimSpace(sub); sub != "" {
+		if s.resolveWorkSubdir(sub) == "" {
+			return "", errors.New("工作目录不存在或越界")
+		}
+		rel = filepath.Join(sub, rel)
+	}
+	return s.safeResolve(rel)
+}
+
 // evalRealWithin 解析 target 路径中已存在部分的真实路径，再把尚不存在的尾部原样拼回。
 func evalRealWithin(target string) (string, error) {
 	p := target
@@ -90,7 +101,7 @@ func (s *Server) handleFsList(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, "unauthorized", nil)
 		return
 	}
-	abs, err := s.safeResolve(r.URL.Query().Get("path"))
+	abs, err := s.safeResolveScoped(r.URL.Query().Get("path"), r.URL.Query().Get("work_subdir"))
 	if err != nil {
 		writeJSON(w, 400, err.Error(), nil)
 		return
@@ -127,7 +138,7 @@ func (s *Server) handleFsRead(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, "unauthorized", nil)
 		return
 	}
-	abs, err := s.safeResolve(r.URL.Query().Get("path"))
+	abs, err := s.safeResolveScoped(r.URL.Query().Get("path"), r.URL.Query().Get("work_subdir"))
 	if err != nil {
 		writeJSON(w, 400, err.Error(), nil)
 		return
@@ -173,7 +184,7 @@ func (s *Server) handleFsWrite(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, "请求体格式错误", nil)
 		return
 	}
-	abs, err := s.safeResolve(body.Path)
+	abs, err := s.safeResolveScoped(body.Path, r.URL.Query().Get("work_subdir"))
 	if err != nil {
 		writeJSON(w, 400, err.Error(), nil)
 		return
@@ -213,7 +224,7 @@ func (s *Server) handleFsUpload(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, "文件超过 50MB 上限", nil)
 		return
 	}
-	abs, err := s.safeResolve(body.Path)
+	abs, err := s.safeResolveScoped(body.Path, r.URL.Query().Get("work_subdir"))
 	if err != nil {
 		writeJSON(w, 400, err.Error(), nil)
 		return
@@ -241,7 +252,7 @@ func (s *Server) handleFsMkdir(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, "请求体格式错误", nil)
 		return
 	}
-	abs, err := s.safeResolve(body.Path)
+	abs, err := s.safeResolveScoped(body.Path, r.URL.Query().Get("work_subdir"))
 	if err != nil {
 		writeJSON(w, 400, err.Error(), nil)
 		return
@@ -259,7 +270,7 @@ func (s *Server) handleFsDownload(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, "unauthorized", nil)
 		return
 	}
-	abs, err := s.safeResolve(r.URL.Query().Get("path"))
+	abs, err := s.safeResolveScoped(r.URL.Query().Get("path"), r.URL.Query().Get("work_subdir"))
 	if err != nil {
 		writeJSON(w, 400, err.Error(), nil)
 		return
@@ -291,12 +302,12 @@ func (s *Server) handleFsDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rel := r.URL.Query().Get("path")
-	abs, err := s.safeResolve(rel)
+	abs, err := s.safeResolveScoped(rel, r.URL.Query().Get("work_subdir"))
 	if err != nil {
 		writeJSON(w, 400, err.Error(), nil)
 		return
 	}
-	root, _ := s.realRoot()
+	root, _ := s.safeResolveScoped("", r.URL.Query().Get("work_subdir"))
 	if abs == root {
 		writeJSON(w, 400, "不能删除工作目录本身", nil)
 		return
@@ -324,7 +335,7 @@ func (s *Server) handleFsTree(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, "unauthorized", nil)
 		return
 	}
-	root, err := s.realRoot()
+	root, err := s.safeResolveScoped("", r.URL.Query().Get("work_subdir"))
 	if err != nil {
 		writeJSON(w, 400, err.Error(), nil)
 		return

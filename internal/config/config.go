@@ -31,6 +31,7 @@ type Config struct {
 	// 以下为「按连接」注入的字段，不来自 env，由调用方按请求写入。
 	ClaudeAuthToken        string // 用户私有 ANTHROPIC_AUTH_TOKEN，非空时经 --settings 注入
 	ClaudeBaseURL          string // 用户私有 ANTHROPIC_BASE_URL，留空走宿主配置或官方端点
+	UserMCPConfig          string // 上游握手传入的用户 MCP JSON，仅当前连接生效
 	DisableBackgroundTasks bool   // 禁用 Bash run_in_background（CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1）
 }
 

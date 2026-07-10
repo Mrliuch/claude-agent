@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -56,6 +57,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/agent/fs/tree", s.handleFsTree)
 	mux.HandleFunc("/agent/fs/download", s.handleFsDownload)
 	mux.HandleFunc("/agent/fs/upload", s.handleFsUpload)
+	mux.HandleFunc("/agent/ai/catalog", s.handleAICatalog)
 	mux.HandleFunc("/agent/sessions/list", s.handleSessionsList)
 	mux.HandleFunc("/agent/sessions/read", s.handleSessionRead)
 	mux.HandleFunc("/agent/login", s.handleLogin)
@@ -176,6 +178,11 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := strings.TrimSpace(r.Header.Get("X-Claude-Model")); v != "" {
 		cfg.Model = v
+	}
+	if raw := strings.TrimSpace(r.Header.Get("X-Claude-User-Mcp")); raw != "" {
+		if data, err := base64.StdEncoding.DecodeString(raw); err == nil && len(data) <= 24*1024 {
+			cfg.UserMCPConfig = string(data)
+		}
 	}
 
 	b := bridge.NewBridge(cfg)

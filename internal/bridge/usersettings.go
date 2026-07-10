@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"claude-agent/internal/config"
 )
@@ -14,6 +15,55 @@ var gatewayModelKeys = []string{
 	"ANTHROPIC_DEFAULT_HAIKU_MODEL",
 	"ANTHROPIC_DEFAULT_OPUS_MODEL",
 	"ANTHROPIC_DEFAULT_SONNET_MODEL",
+}
+
+// writeUserMCPConfig 将平台已鉴权的用户 MCP 生成 Claude CLI 可读取的临时配置。
+// 结构兼容 Claude Code 的 .mcp.json；文件 0600 且连接结束立即删除。
+func writeUserMCPConfig(raw string) (string, error) {
+	var rows []struct {
+		Name      string            `json:"name"`
+		Transport string            `json:"transport"`
+		Endpoint  string            `json:"endpoint_or_command"`
+		Args      []string          `json:"args"`
+		Env       map[string]string `json:"env"`
+		Headers   map[string]string `json:"headers"`
+	}
+	if err := json.Unmarshal([]byte(raw), &rows); err != nil {
+		return "", err
+	}
+	servers := map[string]any{}
+	for _, row := range rows {
+		name := strings.TrimSpace(row.Name)
+		endpoint := strings.TrimSpace(row.Endpoint)
+		if name == "" || endpoint == "" {
+			continue
+		}
+		if row.Transport == "stdio" {
+			servers[name] = map[string]any{"command": endpoint, "args": row.Args, "env": row.Env}
+		} else {
+			servers[name] = map[string]any{"type": "http", "url": endpoint, "headers": row.Headers}
+		}
+	}
+	payload, err := json.Marshal(map[string]any{"mcpServers": servers})
+	if err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp("", "claude-agent-mcp-*.json")
+	if err != nil {
+		return "", err
+	}
+	path := f.Name()
+	_ = f.Chmod(0o600)
+	if _, err = f.Write(payload); err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return "", err
+	}
+	if err = f.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	return path, nil
 }
 
 // hostSettingsEnv 读取宿主 claude 配置（CLAUDE_CONFIG_DIR 或 ~/.claude）下
