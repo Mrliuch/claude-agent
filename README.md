@@ -38,6 +38,8 @@ VM。`claude-agent` 给那台机器一个轻量、可审计的远程操控面：
   `--settings` 文件（0600，连接关闭即删），覆盖认证 token 与端点；用户未配置则沿用宿主共享凭据。
 - **项目 Skills 自动发现** —— 每个会话加载用户、项目和本地设置源；工作目录下
   `.claude/skills/<名称>/SKILL.md` 可被 Claude Code 自动发现或通过 `/技能名` 显式调用。
+- **系统 MCP 只读目录** —— `/agent/catalog` 同时扫描 `~/.claude.json` 与
+  `~/.claude/system-mcp.json`；后者仅登记服务名称，不能存放共享令牌。实际 MCP 凭据由上游中继按连接、按用户注入临时配置。
 
 ---
 

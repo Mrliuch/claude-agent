@@ -20,3 +20,13 @@ func TestScanSkillsReadsDescription(t *testing.T) {
 		t.Fatalf("unexpected skills: %#v", items)
 	}
 }
+
+func TestMergeMCPDeduplicatesNames(t *testing.T) {
+	items := mergeMCP(
+		[]map[string]string{{"name": "CloudScope", "source": "系统"}},
+		[]map[string]string{{"name": "CloudScope", "source": "系统"}, {"name": "GitLab", "source": "系统"}},
+	)
+	if len(items) != 2 || items[0]["name"] != "CloudScope" || items[1]["name"] != "GitLab" {
+		t.Fatalf("unexpected MCP entries: %#v", items)
+	}
+}
