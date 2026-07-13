@@ -1,12 +1,15 @@
 package server
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,8 +38,11 @@ var upgrader = websocket.Upgrader{
 
 // Server 持有配置，提供 HTTP/WebSocket 路由。
 type Server struct {
-	cfg    config.Config
-	wechat *wechat.Manager // 可空:未启用微信通道时为 nil
+	cfg               config.Config
+	wechat            *wechat.Manager // 可空:未启用微信通道时为 nil
+	claudeInfoOnce    sync.Once
+	claudeVersion     string
+	projectSkillsOkay bool
 }
 
 func NewServer(cfg config.Config) *Server {
@@ -142,7 +148,32 @@ func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
 	if v == "" {
 		v = "unknown"
 	}
-	_ = json.NewEncoder(w).Encode(map[string]string{"version": v})
+	claudeVersion, skillsOkay := s.claudeRuntimeInfo()
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"version": v, "claude_version": claudeVersion, "project_skills_supported": skillsOkay,
+	})
+}
+
+// claudeRuntimeInfo 缓存探测 Claude Code 是否支持 --setting-sources。该参数用于
+// 让非交互 stream-json 会话显式加载当前工作目录的项目 Skills；旧 CLI 不支持时
+// 仍可被平台明确提示升级，而不是在对话中静默丢失 Skills。
+func (s *Server) claudeRuntimeInfo() (string, bool) {
+	s.claudeInfoOnce.Do(func() {
+		s.claudeVersion = claudeCommandOutput(s.cfg.ClaudeBin, "--version")
+		help := claudeCommandOutput(s.cfg.ClaudeBin, "--help")
+		s.projectSkillsOkay = strings.Contains(help, "--setting-sources")
+	})
+	return s.claudeVersion, s.projectSkillsOkay
+}
+
+func claudeCommandOutput(bin string, args ...string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, bin, args...).CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // handleChat 升级为 WebSocket，鉴权后桥接到本机 claude。

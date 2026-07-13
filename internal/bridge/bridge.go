@@ -100,6 +100,9 @@ func (b *Bridge) buildArgs() []string {
 		"--input-format", "stream-json",
 		"--output-format", "stream-json",
 		"--verbose",
+		// 显式加载用户、项目与本地设置源。中继会把用户选择的工作目录设为
+		// cwd，项目级 .claude/skills/ 才能在无界面的 stream-json 会话中被发现。
+		"--setting-sources", "user,project,local",
 		"--permission-mode", orDefault(b.cfg.PermissionMode, "default"),
 		"--permission-prompt-tool", "stdio",
 	}

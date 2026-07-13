@@ -36,6 +36,8 @@ VM。`claude-agent` 给那台机器一个轻量、可审计的远程操控面：
 - **每用户独立凭据** —— 中继后端可在 WebSocket 升级请求里注入 `X-Claude-Auth-Token` /
   `X-Claude-Base-Url` / `X-Claude-Model` 请求头，agent 为该连接的 `claude` 子进程生成临时
   `--settings` 文件（0600，连接关闭即删），覆盖认证 token 与端点；用户未配置则沿用宿主共享凭据。
+- **项目 Skills 自动发现** —— 每个会话加载用户、项目和本地设置源；工作目录下
+  `.claude/skills/<名称>/SKILL.md` 可被 Claude Code 自动发现或通过 `/技能名` 显式调用。
 
 ---
 
@@ -93,6 +95,10 @@ AGENT_TOKEN=$(openssl rand -hex 24) ./claude-agent
 
 > 🔒 **Web 控制台已加认证。** 访问 `/` 需先输入 `AGENT_TOKEN`（与 WebSocket 复用同一 token）；
 > 认证后种下 cookie，未认证只下发登录页。`AGENT_UI=off` 可整体关闭页面。
+
+> 🧩 **项目 Skills 前置条件。** 目标机的 Claude Code 必须支持 `--setting-sources` 参数（执行
+> `claude --help` 可检查）。请保持 Claude Code 为最新版本；agent 的 `/agent/version` 接口会返回
+> `project_skills_supported`，平台专家配置页会对不支持的目标机提示升级。
 
 ---
 

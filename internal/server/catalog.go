@@ -27,8 +27,10 @@ func (s *Server) handleAICatalog(w http.ResponseWriter, r *http.Request) {
 	systemSkills := scanSkills(filepath.Join(home, ".claude", "skills"), "系统")
 	userSkills := scanSkills(filepath.Join(root, ".claude", "skills"), "工作目录")
 	systemMCP := scanMCP(filepath.Join(home, ".claude.json"), "系统")
+	claudeVersion, skillsOkay := s.claudeRuntimeInfo()
 	writeJSON(w, 0, "ok", map[string]any{
 		"system_skills": systemSkills, "user_skills": userSkills, "system_mcp": systemMCP,
+		"claude_version": claudeVersion, "project_skills_supported": skillsOkay,
 	})
 }
 

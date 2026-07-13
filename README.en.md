@@ -37,6 +37,8 @@ thin, auditable remote-control surface:
   directory, with strict path-jail (no `..` escape, no symlink escape).
 - **Embeddable** — the same WebSocket endpoint can sit behind your own auth-relay backend
   if you'd rather not expose the agent directly.
+- **Project Skill discovery** — every session loads user, project, and local setting sources, so
+  `.claude/skills/<name>/SKILL.md` under the working directory is discovered automatically or can be invoked with `/skill-name`.
 
 ---
 
