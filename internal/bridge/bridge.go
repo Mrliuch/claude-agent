@@ -47,16 +47,13 @@ func (b *Bridge) Events() <-chan map[string]any {
 
 // Start 拉起 claude 子进程并发送 initialize 握手。
 func (b *Bridge) Start() error {
-	// 有用户私有凭据时，写出一个 --settings 文件覆盖 claude 鉴权。
-	// 注意：进程 env 会被宿主 ~/.claude/settings.json 的 env 块压制（真机核实），
-	// 因此必须走 --settings（优先级高于用户 settings.json）才能让用户 token 生效。
-	if b.cfg.ClaudeAuthToken != "" {
-		path, err := writeUserSettings(b.cfg)
-		if err != nil {
-			return fmt.Errorf("写出用户 settings 失败: %w", err)
-		}
-		b.settingsPath = path
+	// 每个浏览器中继会话均写出临时 --settings：其优先级高于宿主 settings.json，
+	// 可同时注入平台用户私有 Claude 凭据和短期任务归档令牌，并屏蔽宿主的共享归档令牌。
+	path, err := writeUserSettings(b.cfg)
+	if err != nil {
+		return fmt.Errorf("写出用户 settings 失败: %w", err)
 	}
+	b.settingsPath = path
 	if b.cfg.UserMCPConfig != "" {
 		path, err := writeUserMCPConfig(b.cfg.UserMCPConfig)
 		if err != nil {

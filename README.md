@@ -33,9 +33,10 @@ VM。`claude-agent` 给那台机器一个轻量、可审计的远程操控面：
 - **带围栏的文件管理** —— 在工作目录内浏览 / 查看 / 下载 / 上传，严格路径围栏（`..` 越界、
   软链逃逸都拦死）。
 - **可嵌入** —— 同一个 WebSocket 端点也能藏在你自己的鉴权中继后端之后，不必直接暴露代理。
-- **每用户独立凭据** —— 中继后端可在 WebSocket 升级请求里注入 `X-Claude-Auth-Token` /
-  `X-Claude-Base-Url` / `X-Claude-Model` 请求头，agent 为该连接的 `claude` 子进程生成临时
-  `--settings` 文件（0600，连接关闭即删），覆盖认证 token 与端点；用户未配置则沿用宿主共享凭据。
+- **每用户独立凭据与任务归档** —— 中继后端可在 WebSocket 升级请求里注入 `X-Claude-Auth-Token` /
+  `X-Claude-Base-Url` / `X-Claude-Model` 及短期 `X-Claude-Task-Audit-*` 请求头，agent 为该连接的
+  `claude` 子进程生成临时 `--settings` 文件（0600，连接关闭即删）。任务归档凭据仅按当前平台用户注入，
+  并会屏蔽宿主 `settings.json` 中的同名全局变量，避免多人共用 SSH 用户导致记录错归属。
 - **项目 Skills 自动发现** —— 每个会话加载用户、项目和本地设置源；工作目录下
   `.claude/skills/<名称>/SKILL.md` 可被 Claude Code 自动发现或通过 `/技能名` 显式调用。
 - **系统 MCP 只读目录** —— `/agent/catalog` 同时扫描 `~/.claude.json` 与

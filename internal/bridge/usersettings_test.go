@@ -73,6 +73,37 @@ func TestBuildUserSettingsEnv_DoesNotMutateBase(t *testing.T) {
 	}
 }
 
+func TestBuildUserSettingsEnv_UsesSessionTaskAuditAndRemovesHostToken(t *testing.T) {
+	base := map[string]string{
+		"CLOUDSCOPE_TASK_AUDIT_URL":   "http://old.example/ingest",
+		"CLOUDSCOPE_TASK_AUDIT_TOKEN": "cstask-shared-admin",
+	}
+	env := buildUserSettingsEnv(config.Config{
+		TaskAuditURL:   "https://cloudscope.example/api/audit/ai-tasks/ingest",
+		TaskAuditToken: "cstask-current-user",
+	}, base)
+	if env["CLOUDSCOPE_TASK_AUDIT_URL"] != "https://cloudscope.example/api/audit/ai-tasks/ingest" {
+		t.Fatalf("应使用当前会话审计地址，got %q", env["CLOUDSCOPE_TASK_AUDIT_URL"])
+	}
+	if env["CLOUDSCOPE_TASK_AUDIT_TOKEN"] != "cstask-current-user" {
+		t.Fatalf("应使用当前会话令牌，got %q", env["CLOUDSCOPE_TASK_AUDIT_TOKEN"])
+	}
+}
+
+func TestBuildUserSettingsEnv_RemovesHostTaskAuditWithoutSessionToken(t *testing.T) {
+	base := map[string]string{
+		"CLOUDSCOPE_TASK_AUDIT_URL":   "http://old.example/ingest",
+		"CLOUDSCOPE_TASK_AUDIT_TOKEN": "cstask-shared-admin",
+	}
+	env := buildUserSettingsEnv(config.Config{}, base)
+	if _, ok := env["CLOUDSCOPE_TASK_AUDIT_URL"]; ok {
+		t.Fatal("无平台会话令牌时必须移除宿主审计地址")
+	}
+	if _, ok := env["CLOUDSCOPE_TASK_AUDIT_TOKEN"]; ok {
+		t.Fatal("无平台会话令牌时必须移除宿主共享令牌")
+	}
+}
+
 func TestWriteUserSettings_FileContent(t *testing.T) {
 	path, err := writeUserSettings(config.Config{ClaudeAuthToken: "user-token"})
 	if err != nil {

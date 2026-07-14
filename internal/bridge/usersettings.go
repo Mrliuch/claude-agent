@@ -91,9 +91,10 @@ func hostSettingsEnv() map[string]string {
 	return parsed.Env
 }
 
-// buildUserSettingsEnv 在宿主 env 基底上叠加用户私有凭据：
+// buildUserSettingsEnv 在宿主 env 基底上叠加当前连接的用户私有凭据：
 //   - 始终覆盖 ANTHROPIC_AUTH_TOKEN 为用户 token
 //   - 用户给了 base_url：覆盖 ANTHROPIC_BASE_URL，并丢弃网关专用模型映射
+//   - 始终清理宿主全局 CloudScope 任务归档凭据；仅同时收到本次握手的 URL/Token 时注入
 //
 // 返回最终的 env map，不修改入参基底。
 func buildUserSettingsEnv(cfg config.Config, base map[string]string) map[string]string {
@@ -101,17 +102,25 @@ func buildUserSettingsEnv(cfg config.Config, base map[string]string) map[string]
 	for k, v := range base {
 		env[k] = v
 	}
-	env["ANTHROPIC_AUTH_TOKEN"] = cfg.ClaudeAuthToken
+	delete(env, "CLOUDSCOPE_TASK_AUDIT_URL")
+	delete(env, "CLOUDSCOPE_TASK_AUDIT_TOKEN")
+	if cfg.ClaudeAuthToken != "" {
+		env["ANTHROPIC_AUTH_TOKEN"] = cfg.ClaudeAuthToken
+	}
 	if cfg.ClaudeBaseURL != "" {
 		env["ANTHROPIC_BASE_URL"] = cfg.ClaudeBaseURL
 		for _, k := range gatewayModelKeys {
 			delete(env, k)
 		}
 	}
+	if cfg.TaskAuditURL != "" && cfg.TaskAuditToken != "" {
+		env["CLOUDSCOPE_TASK_AUDIT_URL"] = cfg.TaskAuditURL
+		env["CLOUDSCOPE_TASK_AUDIT_TOKEN"] = cfg.TaskAuditToken
+	}
 	return env
 }
 
-// writeUserSettings 把用户私有凭据写成一个临时 --settings 文件（0600），返回路径。
+// writeUserSettings 把当前连接的用户凭据和归档凭据写成临时 --settings 文件（0600），返回路径。
 // 调用方（Bridge.Close）负责删除。
 //
 // 为什么不用进程 env：claude 的 settings.json env 块会完全压制进程环境变量（真机核实），

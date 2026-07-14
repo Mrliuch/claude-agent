@@ -215,6 +215,16 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			cfg.UserMCPConfig = string(data)
 		}
 	}
+	// 平台会话的任务归档凭据仅通过本次握手抵达，随后写入临时 --settings 文件。
+	// 不读取宿主 settings.json 的同名变量，防止共享 SSH 用户导致归档错归属。
+	if v := strings.TrimSpace(r.Header.Get("X-Claude-Task-Audit-Url")); len(v) <= 512 &&
+		(strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://")) {
+		cfg.TaskAuditURL = v
+	}
+	if v := strings.TrimSpace(r.Header.Get("X-Claude-Task-Audit-Token")); len(v) <= 512 &&
+		strings.HasPrefix(v, "cstask_") {
+		cfg.TaskAuditToken = v
+	}
 
 	b := bridge.NewBridge(cfg)
 	if err := b.Start(); err != nil {

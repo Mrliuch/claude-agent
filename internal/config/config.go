@@ -32,6 +32,8 @@ type Config struct {
 	ClaudeAuthToken        string // 用户私有 ANTHROPIC_AUTH_TOKEN，非空时经 --settings 注入
 	ClaudeBaseURL          string // 用户私有 ANTHROPIC_BASE_URL，留空走宿主配置或官方端点
 	UserMCPConfig          string // 上游握手传入的用户 MCP JSON，仅当前连接生效
+	TaskAuditURL           string // 上游握手传入的 CloudScope 任务归档接口，仅当前连接生效
+	TaskAuditToken         string // 当前平台用户的短期 cstask_ 令牌，仅当前连接生效
 	DisableBackgroundTasks bool   // 禁用 Bash run_in_background（CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1）
 }
 
