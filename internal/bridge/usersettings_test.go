@@ -104,6 +104,26 @@ func TestBuildUserSettingsEnv_RemovesHostTaskAuditWithoutSessionToken(t *testing
 	}
 }
 
+func TestBuildUserSettingsEnv_UsesSessionWecomSendAndRemovesHostToken(t *testing.T) {
+	base := map[string]string{
+		"CLOUDSCOPE_WECOM_SEND_URL":   "https://old.example/api/ai/wecom",
+		"CLOUDSCOPE_WECOM_SEND_TOKEN": "cswecom-shared-admin",
+	}
+	env := buildUserSettingsEnv(config.Config{
+		WecomSendURL:   "https://cloudscope.example/api/ai/wecom",
+		WecomSendToken: "cswecom-current-user",
+	}, base)
+	if env["CLOUDSCOPE_WECOM_SEND_URL"] != "https://cloudscope.example/api/ai/wecom" {
+		t.Fatalf("应使用当前会话企微接口，got %q", env["CLOUDSCOPE_WECOM_SEND_URL"])
+	}
+	if env["CLOUDSCOPE_WECOM_SEND_TOKEN"] != "cswecom-current-user" {
+		t.Fatalf("应使用当前会话企微令牌，got %q", env["CLOUDSCOPE_WECOM_SEND_TOKEN"])
+	}
+	if _, ok := buildUserSettingsEnv(config.Config{}, base)["CLOUDSCOPE_WECOM_SEND_TOKEN"]; ok {
+		t.Fatal("无平台会话令牌时必须移除宿主共享企微令牌")
+	}
+}
+
 func TestWriteUserSettings_FileContent(t *testing.T) {
 	path, err := writeUserSettings(config.Config{ClaudeAuthToken: "user-token"})
 	if err != nil {

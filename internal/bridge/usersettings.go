@@ -94,7 +94,7 @@ func hostSettingsEnv() map[string]string {
 // buildUserSettingsEnv 在宿主 env 基底上叠加当前连接的用户私有凭据：
 //   - 始终覆盖 ANTHROPIC_AUTH_TOKEN 为用户 token
 //   - 用户给了 base_url：覆盖 ANTHROPIC_BASE_URL，并丢弃网关专用模型映射
-//   - 始终清理宿主全局 CloudScope 任务归档凭据；仅同时收到本次握手的 URL/Token 时注入
+//   - 始终清理宿主全局 CloudScope 任务归档/企微发送凭据；仅同时收到本次握手的 URL/Token 时注入
 //
 // 返回最终的 env map，不修改入参基底。
 func buildUserSettingsEnv(cfg config.Config, base map[string]string) map[string]string {
@@ -104,6 +104,8 @@ func buildUserSettingsEnv(cfg config.Config, base map[string]string) map[string]
 	}
 	delete(env, "CLOUDSCOPE_TASK_AUDIT_URL")
 	delete(env, "CLOUDSCOPE_TASK_AUDIT_TOKEN")
+	delete(env, "CLOUDSCOPE_WECOM_SEND_URL")
+	delete(env, "CLOUDSCOPE_WECOM_SEND_TOKEN")
 	if cfg.ClaudeAuthToken != "" {
 		env["ANTHROPIC_AUTH_TOKEN"] = cfg.ClaudeAuthToken
 	}
@@ -116,6 +118,10 @@ func buildUserSettingsEnv(cfg config.Config, base map[string]string) map[string]
 	if cfg.TaskAuditURL != "" && cfg.TaskAuditToken != "" {
 		env["CLOUDSCOPE_TASK_AUDIT_URL"] = cfg.TaskAuditURL
 		env["CLOUDSCOPE_TASK_AUDIT_TOKEN"] = cfg.TaskAuditToken
+	}
+	if cfg.WecomSendURL != "" && cfg.WecomSendToken != "" {
+		env["CLOUDSCOPE_WECOM_SEND_URL"] = cfg.WecomSendURL
+		env["CLOUDSCOPE_WECOM_SEND_TOKEN"] = cfg.WecomSendToken
 	}
 	return env
 }

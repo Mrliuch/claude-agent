@@ -46,6 +46,7 @@ type Server struct {
 }
 
 func NewServer(cfg config.Config) *Server {
+	installBundledSystemSkills()
 	return &Server{cfg: cfg}
 }
 
@@ -224,6 +225,15 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if v := strings.TrimSpace(r.Header.Get("X-Claude-Task-Audit-Token")); len(v) <= 512 &&
 		strings.HasPrefix(v, "cstask_") {
 		cfg.TaskAuditToken = v
+	}
+	// 企业微信发送与任务归档同样只按当前连接注入，避免共享 agent 用户继承其他人的权限。
+	if v := strings.TrimSpace(r.Header.Get("X-Claude-Wecom-Send-Url")); len(v) <= 512 &&
+		strings.HasPrefix(v, "https://") {
+		cfg.WecomSendURL = v
+	}
+	if v := strings.TrimSpace(r.Header.Get("X-Claude-Wecom-Send-Token")); len(v) <= 2048 &&
+		strings.HasPrefix(v, "cswecom_") {
+		cfg.WecomSendToken = v
 	}
 
 	b := bridge.NewBridge(cfg)
