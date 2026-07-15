@@ -3,9 +3,11 @@ package server
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,6 +78,18 @@ func TestSafeResolveRejectsSymlinkEscape(t *testing.T) {
 	}
 }
 
+func TestSafeResolveRejectsProtectedPaths(t *testing.T) {
+	s, _ := newFsServer(t)
+	for _, rel := range []string{
+		".claude/settings.local.json", ".ssh/id_ed25519", "hosts-gpu", "hosts-cpu",
+		"inventory.ini", "ansible/hosts", "keys/service.pem", "certs/server.key",
+	} {
+		if _, err := s.safeResolve(rel); !errors.Is(err, errProtectedPath) {
+			t.Fatalf("%q 应被敏感路径策略拦截，实际: %v", rel, err)
+		}
+	}
+}
+
 // ── 增删改查 + 鉴权（HTTP）──────────────────────────────────────────────────
 
 func TestFsCrudRoundtrip(t *testing.T) {
@@ -125,6 +139,9 @@ func TestFsTree(t *testing.T) {
 	os.MkdirAll(filepath.Join(root, "sub/deep"), 0o755)
 	os.WriteFile(filepath.Join(root, "sub/deep/x.txt"), []byte("hi"), 0o644)
 	os.MkdirAll(filepath.Join(root, "node_modules/pkg"), 0o755)
+	os.MkdirAll(filepath.Join(root, ".claude"), 0o755)
+	os.WriteFile(filepath.Join(root, ".claude/settings.local.json"), []byte("private"), 0o600)
+	os.WriteFile(filepath.Join(root, "hosts-gpu"), []byte("private"), 0o600)
 	ts := httptest.NewServer(s.Routes())
 	defer ts.Close()
 	r := doFs(t, ts, "GET", "/agent/fs/tree?token=t", "")
@@ -132,7 +149,7 @@ func TestFsTree(t *testing.T) {
 		t.Fatalf("tree 失败: %v", r)
 	}
 	paths := r["data"].(map[string]any)["paths"].([]any)
-	var has, hasNM bool
+	var has, hasNM, hasProtected bool
 	for _, p := range paths {
 		if p.(string) == "sub/deep/x.txt" {
 			has = true
@@ -140,12 +157,42 @@ func TestFsTree(t *testing.T) {
 		if strings.HasPrefix(p.(string), "node_modules") {
 			hasNM = true
 		}
+		if strings.HasPrefix(p.(string), ".claude") || p.(string) == "hosts-gpu" {
+			hasProtected = true
+		}
 	}
 	if !has {
 		t.Fatalf("tree 未含 sub/deep/x.txt: %v", paths)
 	}
 	if hasNM {
 		t.Fatal("node_modules 未被跳过")
+	}
+	if hasProtected {
+		t.Fatal("敏感路径不应出现在目录树")
+	}
+}
+
+func TestFsProtectedPathHiddenAndUnreadable(t *testing.T) {
+	s, root := newFsServer(t)
+	os.MkdirAll(filepath.Join(root, ".claude"), 0o755)
+	os.WriteFile(filepath.Join(root, ".claude/settings.local.json"), []byte("private"), 0o600)
+	os.WriteFile(filepath.Join(root, "hosts-cpu"), []byte("private"), 0o600)
+	ts := httptest.NewServer(s.Routes())
+	defer ts.Close()
+
+	list := doFs(t, ts, "GET", "/agent/fs/list?token=t", "")
+	entries := list["data"].(map[string]any)["entries"].([]any)
+	for _, entry := range entries {
+		name := entry.(map[string]any)["name"]
+		if name == ".claude" || name == "hosts-cpu" {
+			t.Fatalf("敏感项不应出现在列表: %v", entries)
+		}
+	}
+	for _, path := range []string{".claude/settings.local.json", "hosts-cpu"} {
+		r := doFs(t, ts, "GET", "/agent/fs/read?token=t&path="+url.QueryEscape(path), "")
+		if r["code"].(float64) == 0 {
+			t.Fatalf("敏感路径 %q 不应可读取", path)
+		}
 	}
 }
 

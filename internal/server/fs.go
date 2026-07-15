@@ -17,6 +17,38 @@ import (
 const maxReadBytes = 1 << 20
 
 var errOutsideRoot = errors.New("路径越界：仅允许操作工作目录及其子目录")
+var errProtectedPath = errors.New("路径受保护，禁止通过文件管理访问")
+
+// isProtectedFsPart 拦截工作目录中常见的凭据、主机清单和隐藏配置。
+// 文件 API 面向浏览器用户，不应成为读取 agent 运行账号私有配置的通道。
+func isProtectedFsPart(part string) bool {
+	name := strings.ToLower(strings.TrimSpace(part))
+	if name == "" || name == "." {
+		return false
+	}
+	if strings.HasPrefix(name, ".") || name == "hosts" || strings.HasPrefix(name, "hosts-") ||
+		name == "inventory" || strings.HasPrefix(name, "inventory.") || strings.HasPrefix(name, "ansible") {
+		return true
+	}
+	switch name {
+	case "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "authorized_keys", "known_hosts",
+		"credentials", "credential", "secrets", "secret", "password", "passwd":
+		return true
+	}
+	return strings.HasSuffix(name, ".pem") || strings.HasSuffix(name, ".key") ||
+		strings.HasSuffix(name, ".p12") || strings.HasSuffix(name, ".pfx")
+}
+
+func isProtectedFsPath(rel string) bool {
+	for _, part := range strings.FieldsFunc(filepath.ToSlash(strings.TrimSpace(rel)), func(r rune) bool {
+		return r == '/'
+	}) {
+		if isProtectedFsPart(part) {
+			return true
+		}
+	}
+	return false
+}
 
 // realRoot 返回经软链解析的工作目录绝对路径（围栏根）。
 func (s *Server) realRoot() (string, error) {
@@ -33,6 +65,9 @@ func (s *Server) realRoot() (string, error) {
 
 // safeResolve 把相对 work_dir 的路径解析为绝对路径，并强制围栏。
 func (s *Server) safeResolve(rel string) (string, error) {
+	if isProtectedFsPath(rel) {
+		return "", errProtectedPath
+	}
 	root, err := s.realRoot()
 	if err != nil {
 		return "", err
@@ -113,6 +148,9 @@ func (s *Server) handleFsList(w http.ResponseWriter, r *http.Request) {
 	}
 	entries := make([]fsEntry, 0, len(infos))
 	for _, de := range infos {
+		if isProtectedFsPart(de.Name()) {
+			continue
+		}
 		fi, err := de.Info()
 		if err != nil {
 			continue
@@ -346,11 +384,14 @@ func (s *Server) handleFsTree(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil
 		}
-		if d.IsDir() && p != root && skipDirs[d.Name()] {
-			return filepath.SkipDir
-		}
 		rel, e := filepath.Rel(root, p)
 		if e != nil || rel == "." {
+			return nil
+		}
+		if isProtectedFsPath(rel) || (d.IsDir() && skipDirs[d.Name()]) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		rel = filepath.ToSlash(rel)
