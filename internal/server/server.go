@@ -216,16 +216,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			cfg.UserMCPConfig = string(data)
 		}
 	}
-	// 平台会话的任务归档凭据仅通过本次握手抵达，随后写入临时 --settings 文件。
-	// 不读取宿主 settings.json 的同名变量，防止共享 SSH 用户导致归档错归属。
-	if v := strings.TrimSpace(r.Header.Get("X-Claude-Task-Audit-Url")); len(v) <= 512 &&
-		(strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://")) {
-		cfg.TaskAuditURL = v
-	}
-	if v := strings.TrimSpace(r.Header.Get("X-Claude-Task-Audit-Token")); len(v) <= 512 &&
-		strings.HasPrefix(v, "cstask_") {
-		cfg.TaskAuditToken = v
-	}
+	applyTaskAuditHeaders(&cfg, r.Header)
 	// 企业微信发送与任务归档同样只按当前连接注入，避免共享 agent 用户继承其他人的权限。
 	if v := strings.TrimSpace(r.Header.Get("X-Claude-Wecom-Send-Url")); len(v) <= 512 &&
 		strings.HasPrefix(v, "https://") {
@@ -302,6 +293,23 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		if ev["type"] == "closed" {
 			return
 		}
+	}
+}
+
+// applyTaskAuditHeaders 只接受平台在当前 WebSocket 握手中签发的 csactor_ 操作者证明。
+// cstask_ 是受控本机提交器使用的服务令牌，绝不能作为浏览器会话的操作者身份传入。
+// 两项缺一不可，避免不完整或过期的握手信息污染本次连接的临时 settings。
+func applyTaskAuditHeaders(cfg *config.Config, headers http.Header) {
+	cfg.TaskAuditURL = ""
+	cfg.TaskAuditToken = ""
+
+	url := strings.TrimSpace(headers.Get("X-Claude-Task-Audit-Url"))
+	token := strings.TrimSpace(headers.Get("X-Claude-Task-Audit-Token"))
+	validURL := len(url) <= 512 && (strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://"))
+	validToken := len(token) <= 512 && strings.HasPrefix(token, "csactor_")
+	if validURL && validToken {
+		cfg.TaskAuditURL = url
+		cfg.TaskAuditToken = token
 	}
 }
 

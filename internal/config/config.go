@@ -33,7 +33,7 @@ type Config struct {
 	ClaudeBaseURL          string // 用户私有 ANTHROPIC_BASE_URL，留空走宿主配置或官方端点
 	UserMCPConfig          string // 上游握手传入的用户 MCP JSON，仅当前连接生效
 	TaskAuditURL           string // 上游握手传入的 CloudScope 任务归档接口，仅当前连接生效
-	TaskAuditToken         string // 当前平台用户的短期 cstask_ 令牌，仅当前连接生效
+	TaskAuditToken         string // 当前平台用户的短期 csactor_ 操作者证明，仅当前连接生效
 	WecomSendURL           string // 上游握手传入的企业微信受控发送 API 根地址，仅当前连接生效
 	WecomSendToken         string // 当前平台用户的短期 cswecom_ 令牌，仅当前连接生效
 	DisableBackgroundTasks bool   // 禁用 Bash run_in_background（CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1）

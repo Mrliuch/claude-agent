@@ -80,12 +80,12 @@ func TestBuildUserSettingsEnv_UsesSessionTaskAuditAndRemovesHostToken(t *testing
 	}
 	env := buildUserSettingsEnv(config.Config{
 		TaskAuditURL:   "https://cloudscope.example/api/audit/ai-tasks/ingest",
-		TaskAuditToken: "cstask-current-user",
+		TaskAuditToken: "csactor-current-user",
 	}, base)
 	if env["CLOUDSCOPE_TASK_AUDIT_URL"] != "https://cloudscope.example/api/audit/ai-tasks/ingest" {
 		t.Fatalf("应使用当前会话审计地址，got %q", env["CLOUDSCOPE_TASK_AUDIT_URL"])
 	}
-	if env["CLOUDSCOPE_TASK_AUDIT_TOKEN"] != "cstask-current-user" {
+	if env["CLOUDSCOPE_TASK_AUDIT_TOKEN"] != "csactor-current-user" {
 		t.Fatalf("应使用当前会话令牌，got %q", env["CLOUDSCOPE_TASK_AUDIT_TOKEN"])
 	}
 }
