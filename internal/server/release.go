@@ -16,17 +16,23 @@ const maxReleaseOutputBytes = 128 << 10
 
 var releaseImage = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{1,500}$`)
 var releaseName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,100}$`)
+var releaseBuildTarget = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,100}$`)
+var releaseBuildArg = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=[^\r\n]{0,1000}$`)
 
 type releaseRunRequest struct {
-	Action     string   `json:"action"`
-	Workspace  string   `json:"workspace"`
-	Dockerfile string   `json:"dockerfile"`
-	Image      string   `json:"image"`
-	Container  string   `json:"container"`
-	Ports      []string `json:"ports"`
-	Env        []string `json:"env"`
-	Volumes    []string `json:"volumes"`
-	TaskID     string   `json:"task_id"`
+	Action      string   `json:"action"`
+	Workspace   string   `json:"workspace"`
+	Dockerfile  string   `json:"dockerfile"`
+	Image       string   `json:"image"`
+	Container   string   `json:"container"`
+	Ports       []string `json:"ports"`
+	Env         []string `json:"env"`
+	Volumes     []string `json:"volumes"`
+	TaskID      string   `json:"task_id"`
+	BuildTarget string   `json:"build_target"`
+	BuildArgs   []string `json:"build_args"`
+	Pull        *bool    `json:"pull"`
+	NoCache     bool     `json:"no_cache"`
 }
 
 // handleReleaseRun is a deliberately narrow Docker executor. It never accepts
@@ -153,7 +159,11 @@ func (s *Server) releaseBuild(ctx context.Context, body releaseRunRequest, docke
 	if _, err = s.safeResolve(filepath.Join(body.Workspace, dockerfile)); err != nil {
 		return "", err
 	}
-	cmd := exec.CommandContext(ctx, "docker", "build", "--pull", "-f", dockerfile, "-t", body.Image, ".")
+	args, err := releaseBuildArgs(body, dockerfile)
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = workspace
 	cmd.Env = dockerEnv
 	out, err := cmd.CombinedOutput()
@@ -165,6 +175,32 @@ func (s *Server) releaseBuild(ctx context.Context, body releaseRunRequest, docke
 	cmd.Env = dockerEnv
 	out, err = cmd.CombinedOutput()
 	return output + "\n" + string(out), err
+}
+
+func releaseBuildArgs(body releaseRunRequest, dockerfile string) ([]string, error) {
+	if len(body.BuildArgs) > 30 {
+		return nil, errOutsideRoot
+	}
+	args := []string{"build"}
+	if body.Pull == nil || *body.Pull {
+		args = append(args, "--pull")
+	}
+	if body.NoCache {
+		args = append(args, "--no-cache")
+	}
+	if target := strings.TrimSpace(body.BuildTarget); target != "" {
+		if !releaseBuildTarget.MatchString(target) {
+			return nil, errOutsideRoot
+		}
+		args = append(args, "--target", target)
+	}
+	for _, value := range body.BuildArgs {
+		if !releaseBuildArg.MatchString(value) {
+			return nil, errOutsideRoot
+		}
+		args = append(args, "--build-arg", value)
+	}
+	return append(args, "-f", dockerfile, "-t", body.Image, "."), nil
 }
 
 func (s *Server) releaseDockerDeploy(ctx context.Context, body releaseRunRequest, dockerEnv []string) (string, error) {
