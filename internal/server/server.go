@@ -45,11 +45,12 @@ type Server struct {
 	projectSkillsOkay bool
 	releaseMu         sync.Mutex
 	releaseCancels    map[string]context.CancelFunc
+	releaseTasks      map[string]*releaseTask
 }
 
 func NewServer(cfg config.Config) *Server {
 	installBundledSystemSkills()
-	return &Server{cfg: cfg, releaseCancels: make(map[string]context.CancelFunc)}
+	return &Server{cfg: cfg, releaseCancels: make(map[string]context.CancelFunc), releaseTasks: make(map[string]*releaseTask)}
 }
 
 // Routes 注册路由。
@@ -69,6 +70,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/agent/git/run", s.handleGitRun)
 	mux.HandleFunc("/agent/release/run", s.handleReleaseRun)
 	mux.HandleFunc("/agent/release/cancel", s.handleReleaseCancel)
+	mux.HandleFunc("/agent/release/tasks", s.handleReleaseTask)
 	mux.HandleFunc("/agent/release/ops", s.handleReleaseOps)
 	mux.HandleFunc("/agent/ai/catalog", s.handleAICatalog)
 	mux.HandleFunc("/agent/sessions/list", s.handleSessionsList)

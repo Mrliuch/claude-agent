@@ -307,8 +307,9 @@ Docker 参数：发布仅允许固定的 build / docker_deploy 动作；运维�
 
 | 方法与路径 | 用途 |
 |-----------|------|
-| `POST /agent/release/run` | 受控 Docker 构建、推送或启动发布容器。平台发布的容器会写入 `cloudscope.managed=true` 和发布单标签。 |
+| `POST /agent/release/run` | 受控 Docker 构建、推送或启动发布容器。`build` 必须带任务 ID，立即返回任务状态；平台发布的容器会写入 `cloudscope.managed=true` 和发布单标签。 |
 | `POST /agent/release/cancel` | 按任务 ID 中断仍在运行的构建。 |
+| `GET /agent/release/tasks?task_id=&offset=` | 读取指定构建任务从 `offset` 开始的增量 Docker 输出、阶段和状态；日志保留 1 小时、单任务最多 128KB，并在 Agent 端脱敏。 |
 | `POST /agent/release/ops` | 查询容器状态/日志，或执行启动、停止、重启；不提供 exec、rm、任意 inspect 或宿主机卷操作。 |
 
 ### 历史会话 HTTP API

@@ -43,3 +43,21 @@ func TestReleaseOpsAllowOnlyFixedActionsAndNames(t *testing.T) {
 		t.Fatal("arbitrary action or container name must be rejected")
 	}
 }
+
+func TestReleaseTaskReturnsRedactedIncrementalOutput(t *testing.T) {
+	task := &releaseTask{status: "running", stage: "Dockerfile 构建中", redacts: []string{"top-secret"}}
+	task.appendOutput("#3 token=top-secret\n")
+	first := task.snapshot(0)
+	if first["output"] != "#3 token=***\n" {
+		t.Fatalf("unexpected redacted output: %#v", first["output"])
+	}
+	offset, ok := first["next_offset"].(int64)
+	if !ok {
+		t.Fatalf("unexpected offset type: %T", first["next_offset"])
+	}
+	task.appendOutput("#4 DONE\n")
+	second := task.snapshot(offset)
+	if second["output"] != "#4 DONE\n" {
+		t.Fatalf("unexpected incremental output: %#v", second["output"])
+	}
+}

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -19,6 +21,7 @@ var releaseImage = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{1,500}$`)
 var releaseName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,100}$`)
 var releaseBuildTarget = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,100}$`)
 var releaseBuildArg = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=[^\r\n]{0,1000}$`)
+var releaseTaskID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,100}$`)
 
 type releaseRunRequest struct {
 	Action      string   `json:"action"`
@@ -41,6 +44,77 @@ type releaseOpsRequest struct {
 	Action    string `json:"action"`
 	Container string `json:"container"`
 	Tail      int    `json:"tail"`
+}
+
+type releaseCredentials struct {
+	endpoint string
+	username string
+	password string
+}
+
+// releaseTask keeps only one bounded, redacted output buffer.  The platform
+// reads it using a byte offset so Dockerfile output can be shown while Docker
+// is still running without opening a generic command-stream API.
+type releaseTask struct {
+	mu       sync.Mutex
+	status   string
+	stage    string
+	output   string
+	logStart int64
+	errorMsg string
+	finished time.Time
+	redacts  []string
+}
+
+func (t *releaseTask) appendOutput(value string) {
+	if value == "" {
+		return
+	}
+	for _, secret := range t.redacts {
+		if len(secret) >= 3 {
+			value = strings.ReplaceAll(value, secret, "***")
+		}
+	}
+	value = regexp.MustCompile(`(?i)((?:password|passwd|token|secret|api[_-]?key)\s*[:=]\s*)\S+`).ReplaceAllString(value, "$1***")
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	combined := append([]byte(t.output), []byte(value)...)
+	if len(combined) > maxReleaseOutputBytes {
+		drop := len(combined) - maxReleaseOutputBytes
+		t.logStart += int64(drop)
+		combined = combined[drop:]
+	}
+	t.output = string(combined)
+}
+
+func (t *releaseTask) snapshot(offset int64) map[string]any {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if offset < t.logStart {
+		offset = t.logStart
+	}
+	end := t.logStart + int64(len(t.output))
+	if offset > end {
+		offset = end
+	}
+	part := []byte(t.output)[offset-t.logStart:]
+	return map[string]any{"status": t.status, "stage": t.stage, "output": string(part),
+		"next_offset": end, "reset": offset == t.logStart && t.logStart > 0,
+		"error": t.errorMsg}
+}
+
+func (t *releaseTask) setStage(stage string) {
+	t.mu.Lock()
+	t.stage = stage
+	t.mu.Unlock()
+}
+
+func (t *releaseTask) finish(status, message string) {
+	t.mu.Lock()
+	t.status = status
+	t.errorMsg = message
+	t.finished = time.Now()
+	t.mu.Unlock()
 }
 
 // handleReleaseRun is a deliberately narrow Docker executor. It never accepts
@@ -68,36 +142,38 @@ func (s *Server) handleReleaseRun(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, "镜像地址格式无效", nil)
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
-	defer cancel()
 	body.TaskID = strings.TrimSpace(body.TaskID)
-	if body.TaskID != "" {
-		s.releaseMu.Lock()
-		if _, exists := s.releaseCancels[body.TaskID]; exists {
-			s.releaseMu.Unlock()
-			writeJSON(w, 409, "发布任务已在执行", nil)
+	credentials, err := releaseCredentialsFromRequest(r)
+	if err != nil {
+		writeJSON(w, 400, "镜像仓库凭据无效", nil)
+		return
+	}
+	if body.Action == "build" {
+		if !releaseTaskID.MatchString(body.TaskID) {
+			writeJSON(w, 400, "构建任务标识无效", nil)
 			return
 		}
-		s.releaseCancels[body.TaskID] = cancel
-		s.releaseMu.Unlock()
-		defer func() { s.releaseMu.Lock(); delete(s.releaseCancels, body.TaskID); s.releaseMu.Unlock() }()
+		if err := s.startReleaseBuild(body, credentials); err != nil {
+			writeJSON(w, 409, err.Error(), nil)
+			return
+		}
+		writeJSON(w, 0, "ok", map[string]any{"task_id": body.TaskID, "status": "running"})
+		return
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	defer cancel()
 	dockerEnv, cleanup, err := releaseDockerEnv()
 	if err != nil {
 		writeJSON(w, 500, "无法创建临时 Docker 凭据目录", nil)
 		return
 	}
 	defer cleanup()
-	if err := releaseLogin(ctx, r, dockerEnv); err != nil {
+	if err := releaseLogin(ctx, credentials, dockerEnv); err != nil {
 		writeJSON(w, 400, "镜像仓库登录失败", nil)
 		return
 	}
 	var output string
-	if body.Action == "build" {
-		output, err = s.releaseBuild(ctx, body, dockerEnv)
-	} else {
-		output, err = s.releaseDockerDeploy(ctx, body, dockerEnv)
-	}
+	output, err = s.releaseDockerDeploy(ctx, body, dockerEnv)
 	if ctx.Err() != nil {
 		writeJSON(w, 504, "发布操作超时", map[string]any{"output": trimReleaseOutput(output)})
 		return
@@ -107,6 +183,115 @@ func (s *Server) handleReleaseRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 0, "ok", map[string]any{"output": trimReleaseOutput(output)})
+}
+
+func (s *Server) startReleaseBuild(body releaseRunRequest, credentials releaseCredentials) error {
+	s.releaseMu.Lock()
+	defer s.releaseMu.Unlock()
+	s.cleanupReleaseTasksLocked()
+	if _, exists := s.releaseCancels[body.TaskID]; exists {
+		return errorsNew("发布任务已在执行")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	task := &releaseTask{status: "running", stage: "正在准备 Docker 构建任务", redacts: releaseRedacts(body, credentials)}
+	s.releaseCancels[body.TaskID] = cancel
+	s.releaseTasks[body.TaskID] = task
+	go s.runReleaseBuild(ctx, cancel, body.TaskID, body, credentials, task)
+	return nil
+}
+
+// errorsNew is kept local to avoid exposing a task implementation detail in
+// callers and keeps this file's user-facing errors in Chinese.
+func errorsNew(message string) error { return &releaseError{message: message} }
+
+type releaseError struct{ message string }
+
+func (e *releaseError) Error() string { return e.message }
+
+func (s *Server) runReleaseBuild(ctx context.Context, cancel context.CancelFunc, taskID string, body releaseRunRequest, credentials releaseCredentials, task *releaseTask) {
+	defer cancel()
+	defer func() {
+		s.releaseMu.Lock()
+		delete(s.releaseCancels, taskID)
+		s.releaseMu.Unlock()
+	}()
+	dockerEnv, cleanup, err := releaseDockerEnv()
+	if err != nil {
+		task.appendOutput("[构建失败] 无法创建临时 Docker 凭据目录\n")
+		task.finish("failed", "无法创建临时 Docker 凭据目录")
+		return
+	}
+	defer cleanup()
+	task.setStage("正在登录镜像仓库")
+	task.appendOutput("[正在登录镜像仓库]\n")
+	if err := releaseLogin(ctx, credentials, dockerEnv); err != nil {
+		task.appendOutput("[构建失败] 镜像仓库登录失败\n")
+		task.finish(releaseTaskStatus(ctx), "镜像仓库登录失败")
+		return
+	}
+	task.setStage("Dockerfile 构建中")
+	task.appendOutput("[Docker build]\n")
+	if err := s.releaseBuildStream(ctx, body, dockerEnv, task); err != nil {
+		status := releaseTaskStatus(ctx)
+		message := "Docker 构建或推送失败"
+		if status == "cancelled" {
+			message = "构建已中断"
+		}
+		task.appendOutput("\n[" + message + "]\n")
+		task.finish(status, message)
+		return
+	}
+	task.appendOutput("\n[镜像构建并推送完成]\n")
+	task.finish("success", "")
+}
+
+func releaseTaskStatus(ctx context.Context) string {
+	if ctx.Err() == context.Canceled {
+		return "cancelled"
+	}
+	if ctx.Err() != nil {
+		return "failed"
+	}
+	return "failed"
+}
+
+func (s *Server) cleanupReleaseTasksLocked() {
+	for id, task := range s.releaseTasks {
+		task.mu.Lock()
+		finished := task.finished
+		task.mu.Unlock()
+		if !finished.IsZero() && time.Since(finished) > time.Hour {
+			delete(s.releaseTasks, id)
+		}
+	}
+}
+
+func (s *Server) handleReleaseTask(w http.ResponseWriter, r *http.Request) {
+	if !s.authed(r) {
+		writeJSON(w, http.StatusUnauthorized, "unauthorized", nil)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, "method not allowed", nil)
+		return
+	}
+	taskID := strings.TrimSpace(r.URL.Query().Get("task_id"))
+	if !releaseTaskID.MatchString(taskID) {
+		writeJSON(w, 400, "构建任务标识无效", nil)
+		return
+	}
+	offset, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("offset")), 10, 64)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+	s.releaseMu.Lock()
+	task := s.releaseTasks[taskID]
+	s.releaseMu.Unlock()
+	if task == nil {
+		writeJSON(w, 404, "构建任务不存在或日志已过期", nil)
+		return
+	}
+	writeJSON(w, 0, "ok", task.snapshot(offset))
 }
 
 func (s *Server) handleReleaseCancel(w http.ResponseWriter, r *http.Request) {
@@ -185,53 +370,96 @@ func releaseDockerEnv() ([]string, func(), error) {
 	return append(os.Environ(), "DOCKER_CONFIG="+dir), func() { _ = os.RemoveAll(dir) }, nil
 }
 
-func releaseLogin(ctx context.Context, r *http.Request, dockerEnv []string) error {
-	endpoint := strings.TrimSpace(r.Header.Get("X-Release-Registry"))
-	username := strings.TrimSpace(r.Header.Get("X-Release-Username"))
-	password := r.Header.Get("X-Release-Password")
-	if endpoint == "" && username == "" && password == "" {
+func releaseCredentialsFromRequest(r *http.Request) (releaseCredentials, error) {
+	credentials := releaseCredentials{endpoint: strings.TrimSpace(r.Header.Get("X-Release-Registry")), username: strings.TrimSpace(r.Header.Get("X-Release-Username")), password: r.Header.Get("X-Release-Password")}
+	if credentials.endpoint == "" && credentials.username == "" && credentials.password == "" {
+		return credentials, nil
+	}
+	if credentials.endpoint == "" || credentials.username == "" || credentials.password == "" || strings.ContainsAny(credentials.endpoint, " \t\n") {
+		return releaseCredentials{}, errOutsideRoot
+	}
+	return credentials, nil
+}
+
+func releaseLogin(ctx context.Context, credentials releaseCredentials, dockerEnv []string) error {
+	if credentials.endpoint == "" {
 		return nil
 	}
-	if endpoint == "" || username == "" || password == "" || strings.ContainsAny(endpoint, " \t\n") {
-		return errOutsideRoot
-	}
-	cmd := exec.CommandContext(ctx, "docker", "login", endpoint, "--username", username, "--password-stdin")
-	cmd.Stdin = strings.NewReader(password)
+	cmd := exec.CommandContext(ctx, "docker", "login", credentials.endpoint, "--username", credentials.username, "--password-stdin")
+	cmd.Stdin = strings.NewReader(credentials.password)
 	cmd.Env = dockerEnv
 	return cmd.Run()
 }
 
-func (s *Server) releaseBuild(ctx context.Context, body releaseRunRequest, dockerEnv []string) (string, error) {
+func (s *Server) releaseBuildStream(ctx context.Context, body releaseRunRequest, dockerEnv []string, task *releaseTask) error {
 	workspace, err := s.safeResolve(body.Workspace)
 	if err != nil {
-		return "", err
+		return err
 	}
 	dockerfile := strings.TrimSpace(body.Dockerfile)
 	if dockerfile == "" {
 		dockerfile = "Dockerfile"
 	}
 	if filepath.IsAbs(dockerfile) || isProtectedFsPath(dockerfile) {
-		return "", errOutsideRoot
+		return errOutsideRoot
 	}
 	if _, err = s.safeResolve(filepath.Join(body.Workspace, dockerfile)); err != nil {
-		return "", err
+		return err
 	}
 	args, err := releaseBuildArgs(body, dockerfile)
 	if err != nil {
-		return "", err
+		return err
 	}
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = workspace
 	cmd.Env = dockerEnv
-	out, err := cmd.CombinedOutput()
-	output := string(out)
-	if err != nil {
-		return output, err
+	if err := runReleaseCommand(cmd, task); err != nil {
+		return err
 	}
+	task.setStage("正在推送镜像")
+	task.appendOutput("\n[Docker push]\n")
 	cmd = exec.CommandContext(ctx, "docker", "push", body.Image)
 	cmd.Env = dockerEnv
-	out, err = cmd.CombinedOutput()
-	return output + "\n" + string(out), err
+	return runReleaseCommand(cmd, task)
+}
+
+type releaseLogWriter struct{ task *releaseTask }
+
+func (w releaseLogWriter) Write(p []byte) (int, error) {
+	w.task.appendOutput(string(p))
+	return len(p), nil
+}
+
+func runReleaseCommand(cmd *exec.Cmd, task *releaseTask) error {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	var wg sync.WaitGroup
+	for _, stream := range []io.Reader{stdout, stderr} {
+		wg.Add(1)
+		go func(reader io.Reader) { defer wg.Done(); _, _ = io.Copy(releaseLogWriter{task}, reader) }(stream)
+	}
+	err = cmd.Wait()
+	wg.Wait()
+	return err
+}
+
+func releaseRedacts(body releaseRunRequest, credentials releaseCredentials) []string {
+	values := []string{credentials.password}
+	for _, item := range body.BuildArgs {
+		if _, value, ok := strings.Cut(item, "="); ok {
+			values = append(values, value)
+		}
+	}
+	return values
 }
 
 func releaseBuildArgs(body releaseRunRequest, dockerfile string) ([]string, error) {
