@@ -99,7 +99,74 @@ func (s *Server) handleGitRun(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, "Git 操作失败", map[string]any{"output": trimGitOutput(string(output))})
 		return
 	}
-	writeJSON(w, 0, "ok", map[string]any{"output": trimGitOutput(string(output))})
+	result := string(output)
+	// 子模块只在项目明确声明且 URL 均为无凭据 HTTPS 时才处理。主仓库
+	// 已成功 Clone/Pull 后，子模块的网络或权限错误只作为可重试告警返回，
+	// 不会把主代码操作改判为失败。
+	if body.Action == "clone" || body.Action == "pull" {
+		if submoduleOutput, submoduleErr := syncGitSubmodules(ctx, workspace, cmd.Env); submoduleErr != nil {
+			result += "\n[子模块告警] " + submoduleErr.Error()
+			if submoduleOutput != "" {
+				result += "\n" + submoduleOutput
+			}
+		} else if submoduleOutput != "" {
+			result += "\n[子模块已同步]\n" + submoduleOutput
+		}
+	}
+	writeJSON(w, 0, "ok", map[string]any{"output": trimGitOutput(result)})
+}
+
+// syncGitSubmodules only runs fixed git submodule commands. A repository
+// without .gitmodules is intentionally a no-op, preserving normal Clone/Pull
+// behavior for projects that do not use submodules.
+func syncGitSubmodules(ctx context.Context, workspace string, env []string) (string, error) {
+	urls, err := gitSubmoduleURLs(workspace)
+	if err != nil || len(urls) == 0 {
+		return "", err
+	}
+	var output strings.Builder
+	for _, args := range [][]string{{"submodule", "sync", "--recursive"}, {"submodule", "update", "--init", "--recursive", "--progress"}} {
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = workspace
+		cmd.Env = env
+		part, runErr := cmd.CombinedOutput()
+		if len(part) > 0 {
+			if output.Len() > 0 {
+				output.WriteByte('\n')
+			}
+			output.Write(part)
+		}
+		if runErr != nil {
+			return trimGitOutput(output.String()), errors.New("子模块同步失败，可在网络或权限恢复后再次执行 Pull")
+		}
+	}
+	return trimGitOutput(output.String()), nil
+}
+
+// gitSubmoduleURLs rejects local, SSH and credential-bearing URLs before Git
+// can attempt to fetch them. It accepts the normal .gitmodules `url = ...`
+// form used by GitLab HTTPS submodules.
+func gitSubmoduleURLs(workspace string) ([]string, error) {
+	data, err := os.ReadFile(filepath.Join(workspace, ".gitmodules"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errors.New("无法读取子模块配置")
+	}
+	urls := make([]string, 0)
+	for _, raw := range strings.Split(string(data), "\n") {
+		key, value, ok := strings.Cut(raw, "=")
+		if !ok || strings.TrimSpace(key) != "url" {
+			continue
+		}
+		url := strings.TrimSpace(value)
+		if !validGitHTTPSURL(url) {
+			return nil, errors.New("子模块地址必须为不含凭据的 HTTPS 地址")
+		}
+		urls = append(urls, url)
+	}
+	return urls, nil
 }
 
 func validGitAction(action string) bool {

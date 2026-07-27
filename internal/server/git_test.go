@@ -2,6 +2,7 @@ package server
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -45,5 +46,34 @@ func TestGitAskpassUsesTransientEnvironment(t *testing.T) {
 	joined := strings.Join(gitEnvironment("token-value", path), "\n")
 	if !strings.Contains(joined, "GIT_ASKPASS="+path) || !strings.Contains(joined, "GIT_ASKPASS_USERNAME=oauth2") || !strings.Contains(joined, "GIT_ASKPASS_TOKEN=token-value") {
 		t.Fatal("Git 凭据应通过临时 AskPass 环境注入")
+	}
+}
+
+func TestGitSubmoduleURLsNoConfigIsNoop(t *testing.T) {
+	urls, err := gitSubmoduleURLs(t.TempDir())
+	if err != nil || len(urls) != 0 {
+		t.Fatalf("expected no-op, urls=%v err=%v", urls, err)
+	}
+}
+
+func TestGitSubmoduleURLsAcceptsGitLabHTTPS(t *testing.T) {
+	dir := t.TempDir()
+	content := "[submodule \"agent\"]\n\tpath = claude-agent\n\turl = https://gitlab.example.com/team/agent.git\n"
+	if err := os.WriteFile(filepath.Join(dir, ".gitmodules"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	urls, err := gitSubmoduleURLs(dir)
+	if err != nil || len(urls) != 1 || urls[0] != "https://gitlab.example.com/team/agent.git" {
+		t.Fatalf("unexpected urls=%v err=%v", urls, err)
+	}
+}
+
+func TestGitSubmoduleURLsRejectsUnsafeURL(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".gitmodules"), []byte("url = file:///etc/passwd\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gitSubmoduleURLs(dir); err == nil {
+		t.Fatal("expected unsafe submodule URL to be rejected")
 	}
 }
