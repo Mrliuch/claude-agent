@@ -65,6 +65,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/agent/fs/download", s.handleFsDownload)
 	mux.HandleFunc("/agent/fs/upload", s.handleFsUpload)
 	mux.HandleFunc("/agent/git/run", s.handleGitRun)
+	mux.HandleFunc("/agent/release/run", s.handleReleaseRun)
 	mux.HandleFunc("/agent/ai/catalog", s.handleAICatalog)
 	mux.HandleFunc("/agent/sessions/list", s.handleSessionsList)
 	mux.HandleFunc("/agent/sessions/read", s.handleSessionRead)
