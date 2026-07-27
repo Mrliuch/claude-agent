@@ -29,14 +29,15 @@ type Config struct {
 	WeChatMaxSessions int    // 并发微信会话上限（每会话=1 个 claude 子进程），默认 20
 
 	// 以下为「按连接」注入的字段，不来自 env，由调用方按请求写入。
-	ClaudeAuthToken        string // 用户私有 ANTHROPIC_AUTH_TOKEN，非空时经 --settings 注入
-	ClaudeBaseURL          string // 用户私有 ANTHROPIC_BASE_URL，留空走宿主配置或官方端点
-	UserMCPConfig          string // 上游握手传入的用户 MCP JSON，仅当前连接生效
-	TaskAuditURL           string // 上游握手传入的 CloudScope 任务归档接口，仅当前连接生效
-	TaskAuditToken         string // 当前平台用户的短期 csactor_ 操作者证明，仅当前连接生效
-	WecomSendURL           string // 上游握手传入的企业微信受控发送 API 根地址，仅当前连接生效
-	WecomSendToken         string // 当前平台用户的短期 cswecom_ 令牌，仅当前连接生效
-	DisableBackgroundTasks bool   // 禁用 Bash run_in_background（CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1）
+	ClaudeAuthToken         string // 用户私有 ANTHROPIC_AUTH_TOKEN，非空时经 --settings 注入
+	ClaudeBaseURL           string // 用户私有 ANTHROPIC_BASE_URL，留空走宿主配置或官方端点
+	UserMCPConfig           string // 上游握手传入的用户 MCP JSON，仅当前连接生效
+	TaskAuditURL            string // 上游握手传入的 CloudScope 任务归档接口，仅当前连接生效
+	TaskAuditToken          string // 当前平台用户的短期 csactor_ 操作者证明，仅当前连接生效
+	WecomSendURL            string // 上游握手传入的企业微信受控发送 API 根地址，仅当前连接生效
+	WecomSendToken          string // 当前平台用户的短期 cswecom_ 令牌，仅当前连接生效
+	DevelopmentSystemPrompt string // 上游研发平台传入的追加系统提示词，仅当前连接生效
+	DisableBackgroundTasks  bool   // 禁用 Bash run_in_background（CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1）
 }
 
 // paramDoc 记录每个可配置参数，用于 --help 格式化输出。

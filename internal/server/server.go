@@ -217,6 +217,11 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			cfg.UserMCPConfig = string(data)
 		}
 	}
+	if raw := strings.TrimSpace(r.Header.Get("X-Claude-Development-Prompt")); raw != "" {
+		if data, err := base64.StdEncoding.DecodeString(raw); err == nil && len(data) <= 12*1024 {
+			cfg.DevelopmentSystemPrompt = string(data)
+		}
+	}
 	applyTaskAuditHeaders(&cfg, r.Header)
 	// 企业微信发送与任务归档同样只按当前连接注入，避免共享 agent 用户继承其他人的权限。
 	if v := strings.TrimSpace(r.Header.Get("X-Claude-Wecom-Send-Url")); len(v) <= 512 &&

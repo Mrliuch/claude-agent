@@ -113,6 +113,9 @@ func (b *Bridge) buildArgs() []string {
 	if b.cfg.Model != "" {
 		args = append(args, "--model", b.cfg.Model)
 	}
+	if b.cfg.DevelopmentSystemPrompt != "" {
+		args = append(args, "--append-system-prompt", b.cfg.DevelopmentSystemPrompt)
+	}
 	if b.cfg.SessionID != "" {
 		args = append(args, "--resume", b.cfg.SessionID)
 	}
