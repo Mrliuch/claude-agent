@@ -1,6 +1,7 @@
 package server
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -22,9 +23,17 @@ func TestGitArgsRejectsEmptyCommitMessage(t *testing.T) {
 	}
 }
 
-func TestGitEnvironmentUsesTemporaryBasicHeader(t *testing.T) {
-	joined := strings.Join(gitEnvironment("token-value"), "\n")
-	if !strings.Contains(joined, "GIT_CONFIG_KEY_0=http.extraheader") || !strings.Contains(joined, "Authorization: Basic ") {
-		t.Fatal("Git 认证应通过临时 HTTP Basic Header 注入")
+func TestGitAskpassUsesTransientEnvironment(t *testing.T) {
+	path, cleanup, err := createGitAskpass("token-value")
+	if err != nil {
+		t.Fatalf("创建 askpass 失败: %v", err)
+	}
+	defer cleanup()
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("askpass 文件不存在: %v", err)
+	}
+	joined := strings.Join(gitEnvironment("token-value", path), "\n")
+	if !strings.Contains(joined, "GIT_ASKPASS="+path) || !strings.Contains(joined, "GIT_ASKPASS_USERNAME=oauth2") || !strings.Contains(joined, "GIT_ASKPASS_TOKEN=token-value") {
+		t.Fatal("Git 凭据应通过临时 AskPass 环境注入")
 	}
 }

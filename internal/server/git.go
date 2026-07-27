@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -78,12 +77,18 @@ func (s *Server) handleGitRun(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	askpass, cleanupAskpass, askpassErr := createGitAskpass(r.Header.Get("X-Dev-Git-Token"))
+	if askpassErr != nil {
+		writeJSON(w, http.StatusInternalServerError, "无法准备 Git 凭据助手", nil)
+		return
+	}
+	defer cleanupAskpass()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = filepath.Dir(workspace)
 	if body.Action != "clone" {
 		cmd.Dir = workspace
 	}
-	cmd.Env = gitEnvironment(r.Header.Get("X-Dev-Git-Token"))
+	cmd.Env = gitEnvironment(r.Header.Get("X-Dev-Git-Token"), askpass)
 	output, runErr := cmd.CombinedOutput()
 	if ctx.Err() != nil {
 		writeJSON(w, http.StatusGatewayTimeout, "Git 操作超时", map[string]any{"output": trimGitOutput(string(output))})
@@ -137,12 +142,36 @@ type errGitMessageRequired struct{}
 
 func (errGitMessageRequired) Error() string { return "提交说明不能为空" }
 
-func gitEnvironment(token string) []string {
+func createGitAskpass(token string) (string, func(), error) {
+	if strings.TrimSpace(token) == "" {
+		return "", func() {}, nil
+	}
+	file, err := os.CreateTemp("", "claude-agent-git-askpass-*")
+	if err != nil {
+		return "", func() {}, err
+	}
+	path := file.Name()
+	if _, err := file.WriteString("#!/bin/sh\ncase \"$1\" in\n  *Username*) printf '%s\\n' \"${GIT_ASKPASS_USERNAME}\" ;;\n  *) printf '%s\\n' \"${GIT_ASKPASS_TOKEN}\" ;;\nesac\n"); err != nil {
+		file.Close()
+		os.Remove(path)
+		return "", func() {}, err
+	}
+	if err := file.Close(); err != nil {
+		os.Remove(path)
+		return "", func() {}, err
+	}
+	if err := os.Chmod(path, 0o700); err != nil {
+		os.Remove(path)
+		return "", func() {}, err
+	}
+	return path, func() { _ = os.Remove(path) }, nil
+}
+
+func gitEnvironment(token, askpass string) []string {
 	env := append([]string{}, os.Environ()...)
 	env = append(env, "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
-	if strings.TrimSpace(token) != "" {
-		credential := base64.StdEncoding.EncodeToString([]byte("oauth2:" + token))
-		env = append(env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraheader", "GIT_CONFIG_VALUE_0=Authorization: Basic "+credential)
+	if strings.TrimSpace(token) != "" && askpass != "" {
+		env = append(env, "GIT_ASKPASS="+askpass, "GIT_ASKPASS_USERNAME=oauth2", "GIT_ASKPASS_TOKEN="+token)
 	}
 	return env
 }
