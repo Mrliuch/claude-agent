@@ -23,6 +23,16 @@ func TestGitArgsRejectsEmptyCommitMessage(t *testing.T) {
 	}
 }
 
+func TestGitCloneUsesWorkspaceLeafInParentDirectory(t *testing.T) {
+	args, err := gitArgs(gitRunRequest{Action: "clone", Workspace: "team/project", RepositoryURL: "https://gitlab.example.com/team/project.git"})
+	if err != nil {
+		t.Fatalf("构造 clone 参数失败: %v", err)
+	}
+	if got := args[len(args)-1]; got != "project" {
+		t.Fatalf("clone 目标应为工作区目录名，实际为 %q", got)
+	}
+}
+
 func TestGitAskpassUsesTransientEnvironment(t *testing.T) {
 	path, cleanup, err := createGitAskpass("token-value")
 	if err != nil {

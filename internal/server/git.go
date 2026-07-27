@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -113,7 +114,11 @@ func validGitHTTPSURL(raw string) bool {
 func gitArgs(body gitRunRequest) ([]string, error) {
 	switch body.Action {
 	case "clone":
-		return []string{"clone", "--progress", "--origin", "origin", body.RepositoryURL, body.Workspace}, nil
+		destination := filepath.Base(filepath.Clean(body.Workspace))
+		if destination == "." || destination == string(filepath.Separator) {
+			return nil, errors.New("Clone 目标目录无效")
+		}
+		return []string{"clone", "--progress", "--origin", "origin", body.RepositoryURL, destination}, nil
 	case "pull":
 		return []string{"pull", "--ff-only", "--progress"}, nil
 	case "add":
