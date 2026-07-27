@@ -26,6 +26,7 @@ type releaseRunRequest struct {
 	Ports      []string `json:"ports"`
 	Env        []string `json:"env"`
 	Volumes    []string `json:"volumes"`
+	TaskID     string   `json:"task_id"`
 }
 
 // handleReleaseRun is a deliberately narrow Docker executor. It never accepts
@@ -55,6 +56,18 @@ func (s *Server) handleReleaseRun(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
+	body.TaskID = strings.TrimSpace(body.TaskID)
+	if body.TaskID != "" {
+		s.releaseMu.Lock()
+		if _, exists := s.releaseCancels[body.TaskID]; exists {
+			s.releaseMu.Unlock()
+			writeJSON(w, 409, "发布任务已在执行", nil)
+			return
+		}
+		s.releaseCancels[body.TaskID] = cancel
+		s.releaseMu.Unlock()
+		defer func() { s.releaseMu.Lock(); delete(s.releaseCancels, body.TaskID); s.releaseMu.Unlock() }()
+	}
 	dockerEnv, cleanup, err := releaseDockerEnv()
 	if err != nil {
 		writeJSON(w, 500, "无法创建临时 Docker 凭据目录", nil)
@@ -80,6 +93,23 @@ func (s *Server) handleReleaseRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 0, "ok", map[string]any{"output": trimReleaseOutput(output)})
+}
+
+func (s *Server) handleReleaseCancel(w http.ResponseWriter, r *http.Request) {
+	if !s.authed(r) || r.Method != http.MethodPost {
+		writeJSON(w, http.StatusUnauthorized, "unauthorized", nil)
+		return
+	}
+	taskID := strings.TrimSpace(r.URL.Query().Get("task_id"))
+	s.releaseMu.Lock()
+	cancel := s.releaseCancels[taskID]
+	s.releaseMu.Unlock()
+	if cancel == nil {
+		writeJSON(w, 404, "构建任务不存在或已结束", nil)
+		return
+	}
+	cancel()
+	writeJSON(w, 0, "ok", nil)
 }
 
 // Registry credentials only exist in request headers and an operation-local

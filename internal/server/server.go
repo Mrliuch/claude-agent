@@ -43,11 +43,13 @@ type Server struct {
 	claudeInfoOnce    sync.Once
 	claudeVersion     string
 	projectSkillsOkay bool
+	releaseMu         sync.Mutex
+	releaseCancels    map[string]context.CancelFunc
 }
 
 func NewServer(cfg config.Config) *Server {
 	installBundledSystemSkills()
-	return &Server{cfg: cfg}
+	return &Server{cfg: cfg, releaseCancels: make(map[string]context.CancelFunc)}
 }
 
 // Routes 注册路由。
@@ -66,6 +68,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/agent/fs/upload", s.handleFsUpload)
 	mux.HandleFunc("/agent/git/run", s.handleGitRun)
 	mux.HandleFunc("/agent/release/run", s.handleReleaseRun)
+	mux.HandleFunc("/agent/release/cancel", s.handleReleaseCancel)
 	mux.HandleFunc("/agent/ai/catalog", s.handleAICatalog)
 	mux.HandleFunc("/agent/sessions/list", s.handleSessionsList)
 	mux.HandleFunc("/agent/sessions/read", s.handleSessionRead)
