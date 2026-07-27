@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -33,6 +34,13 @@ type releaseRunRequest struct {
 	BuildArgs   []string `json:"build_args"`
 	Pull        *bool    `json:"pull"`
 	NoCache     bool     `json:"no_cache"`
+	ReleaseID   string   `json:"release_id"`
+}
+
+type releaseOpsRequest struct {
+	Action    string `json:"action"`
+	Container string `json:"container"`
+	Tail      int    `json:"tail"`
 }
 
 // handleReleaseRun is a deliberately narrow Docker executor. It never accepts
@@ -116,6 +124,55 @@ func (s *Server) handleReleaseCancel(w http.ResponseWriter, r *http.Request) {
 	}
 	cancel()
 	writeJSON(w, 0, "ok", nil)
+}
+
+// handleReleaseOps exposes only the small Docker operation set needed by the
+// application operations page. It deliberately does not accept arbitrary
+// Docker arguments, inspect templates, or container filters.
+func (s *Server) handleReleaseOps(w http.ResponseWriter, r *http.Request) {
+	if !s.authed(r) {
+		writeJSON(w, http.StatusUnauthorized, "unauthorized", nil)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, "method not allowed", nil)
+		return
+	}
+	var body releaseOpsRequest
+	if json.NewDecoder(r.Body).Decode(&body) != nil {
+		writeJSON(w, http.StatusBadRequest, "请求体格式错误", nil)
+		return
+	}
+	body.Action = strings.TrimSpace(body.Action)
+	body.Container = strings.TrimSpace(body.Container)
+	if !validReleaseOps(body.Action, body.Container) {
+		writeJSON(w, http.StatusBadRequest, "Docker 运维操作或容器名称无效", nil)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	data, err := releaseDockerOps(ctx, body)
+	if ctx.Err() != nil {
+		writeJSON(w, http.StatusGatewayTimeout, "Docker 运维操作超时", nil)
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, "Docker 运维操作失败", map[string]any{"output": trimReleaseOutput(data["output"])})
+		return
+	}
+	writeJSON(w, 0, "ok", data)
+}
+
+func validReleaseOps(action, container string) bool {
+	if !releaseName.MatchString(container) {
+		return false
+	}
+	switch action {
+	case "status", "logs", "start", "stop", "restart":
+		return true
+	default:
+		return false
+	}
 }
 
 // Registry credentials only exist in request headers and an operation-local
@@ -207,7 +264,13 @@ func (s *Server) releaseDockerDeploy(ctx context.Context, body releaseRunRequest
 	if !releaseName.MatchString(strings.TrimSpace(body.Container)) {
 		return "", errOutsideRoot
 	}
-	args := []string{"run", "-d", "--restart", "unless-stopped", "--name", body.Container}
+	args := []string{"run", "-d", "--restart", "unless-stopped", "--name", body.Container, "--label", "cloudscope.managed=true"}
+	if releaseID := strings.TrimSpace(body.ReleaseID); releaseID != "" {
+		if !releaseName.MatchString(releaseID) {
+			return "", errOutsideRoot
+		}
+		args = append(args, "--label", "cloudscope.release_id="+releaseID)
+	}
 	for _, value := range body.Ports {
 		if !regexp.MustCompile(`^[0-9]{1,5}:[0-9]{1,5}(/(tcp|udp))?$`).MatchString(value) {
 			return "", errOutsideRoot
@@ -238,6 +301,52 @@ func (s *Server) releaseDockerDeploy(ctx context.Context, body releaseRunRequest
 	cmd.Env = dockerEnv
 	out, err = cmd.CombinedOutput()
 	return output + "\n" + string(out), err
+}
+
+func releaseDockerOps(ctx context.Context, body releaseOpsRequest) (map[string]string, error) {
+	switch body.Action {
+	case "status":
+		return releaseDockerStatus(ctx, body.Container)
+	case "logs":
+		tail := body.Tail
+		if tail <= 0 {
+			tail = 500
+		}
+		if tail > 2000 {
+			tail = 2000
+		}
+		out, err := exec.CommandContext(ctx, "docker", "logs", "--timestamps", "--tail", strconv.Itoa(tail), body.Container).CombinedOutput()
+		return map[string]string{"output": trimReleaseOutput(string(out))}, err
+	case "start", "stop", "restart":
+		out, err := exec.CommandContext(ctx, "docker", body.Action, body.Container).CombinedOutput()
+		return map[string]string{"output": trimReleaseOutput(string(out))}, err
+	default:
+		return map[string]string{}, errOutsideRoot
+	}
+}
+
+func releaseDockerStatus(ctx context.Context, container string) (map[string]string, error) {
+	// The template is fixed in code so inspect never returns environment values,
+	// labels beyond the managed marker, mounts, or other sensitive metadata.
+	const format = "{{.State.Status}}\\t{{.State.Running}}\\t{{.Config.Image}}\\t{{.State.StartedAt}}\\t{{.State.FinishedAt}}\\t{{.RestartCount}}"
+	out, err := exec.CommandContext(ctx, "docker", "inspect", "--format", format, container).CombinedOutput()
+	if err != nil {
+		return map[string]string{"output": trimReleaseOutput(string(out))}, err
+	}
+	parts := strings.Split(strings.TrimSpace(string(out)), "\\t")
+	if len(parts) != 6 {
+		return map[string]string{}, errOutsideRoot
+	}
+	result := map[string]string{"status": parts[0], "running": parts[1], "image": parts[2], "started_at": parts[3], "finished_at": parts[4], "restart_count": parts[5]}
+	stats, statsErr := exec.CommandContext(ctx, "docker", "stats", "--no-stream", "--format", "{{.CPUPerc}}\\t{{.MemUsage}}", container).CombinedOutput()
+	if statsErr == nil {
+		values := strings.Split(strings.TrimSpace(string(stats)), "\\t")
+		if len(values) == 2 {
+			result["cpu"] = values[0]
+			result["memory"] = values[1]
+		}
+	}
+	return result, nil
 }
 
 func trimReleaseOutput(value string) string {

@@ -299,6 +299,18 @@ WebSocket：`GET /agent/chat?token=<AGENT_TOKEN>[&session_id=<id>]`
 | `POST /agent/fs/mkdir` | `{path}`。 |
 | `DELETE /agent/fs/delete?path=` | 删除（不能删围栏根本身）。 |
 
+### 平台发布与 Docker 运维 API
+
+发布与运维接口仅供 CloudScope 服务端调用，均需要 `AGENT_TOKEN`。它们不接收 Shell 或任意
+Docker 参数：发布仅允许固定的 build / docker_deploy 动作；运维仅允许已由平台精确指定容器的
+`status`、`logs`、`start`、`stop`、`restart`。状态不会返回环境变量、挂载或完整容器 inspect。
+
+| 方法与路径 | 用途 |
+|-----------|------|
+| `POST /agent/release/run` | 受控 Docker 构建、推送或启动发布容器。平台发布的容器会写入 `cloudscope.managed=true` 和发布单标签。 |
+| `POST /agent/release/cancel` | 按任务 ID 中断仍在运行的构建。 |
+| `POST /agent/release/ops` | 查询容器状态/日志，或执行启动、停止、重启；不提供 exec、rm、任意 inspect 或宿主机卷操作。 |
+
 ### 历史会话 HTTP API
 
 只读访问**当前工作目录**的 Claude 会话历史（CLI 存放在

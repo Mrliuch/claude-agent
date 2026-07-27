@@ -69,6 +69,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/agent/git/run", s.handleGitRun)
 	mux.HandleFunc("/agent/release/run", s.handleReleaseRun)
 	mux.HandleFunc("/agent/release/cancel", s.handleReleaseCancel)
+	mux.HandleFunc("/agent/release/ops", s.handleReleaseOps)
 	mux.HandleFunc("/agent/ai/catalog", s.handleAICatalog)
 	mux.HandleFunc("/agent/sessions/list", s.handleSessionsList)
 	mux.HandleFunc("/agent/sessions/read", s.handleSessionRead)

@@ -32,3 +32,14 @@ func TestReleaseBuildArgsRejectInvalidBuildArg(t *testing.T) {
 		t.Fatal("expected invalid build argument to be rejected")
 	}
 }
+
+func TestReleaseOpsAllowOnlyFixedActionsAndNames(t *testing.T) {
+	for _, action := range []string{"status", "logs", "start", "stop", "restart"} {
+		if !validReleaseOps(action, "cloudscope-api") {
+			t.Fatalf("expected action %q to be allowed", action)
+		}
+	}
+	if validReleaseOps("exec", "cloudscope-api") || validReleaseOps("status", "api;id") {
+		t.Fatal("arbitrary action or container name must be rejected")
+	}
+}
