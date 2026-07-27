@@ -125,7 +125,7 @@ func syncGitSubmodules(ctx context.Context, workspace string, env []string) (str
 		return "", err
 	}
 	var output strings.Builder
-	for _, args := range [][]string{{"submodule", "sync", "--recursive"}, {"submodule", "update", "--init", "--recursive", "--progress"}} {
+	for _, args := range [][]string{{"submodule", "sync", "--recursive"}, {"submodule", "update", "--init", "--recursive"}} {
 		cmd := exec.CommandContext(ctx, "git", args...)
 		cmd.Dir = workspace
 		cmd.Env = env
