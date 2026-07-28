@@ -16,6 +16,7 @@ import (
 )
 
 const maxReleaseOutputBytes = 128 << 10
+const maxDockerfileBytes = 1 << 20
 
 var releaseImage = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{1,500}$`)
 var releaseName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,100}$`)
@@ -403,10 +404,19 @@ func (s *Server) releaseBuildStream(ctx context.Context, body releaseRunRequest,
 	if filepath.IsAbs(dockerfile) || isProtectedFsPath(dockerfile) {
 		return errOutsideRoot
 	}
-	if _, err = s.safeResolve(filepath.Join(body.Workspace, dockerfile)); err != nil {
+	dockerfilePath, err := s.safeResolve(filepath.Join(body.Workspace, dockerfile))
+	if err != nil {
 		return err
 	}
-	args, err := releaseBuildArgs(body, dockerfile)
+	effectiveDockerfile, cleanupDockerfile, injected, err := prepareGoProxyDockerfile(dockerfilePath, dockerfile)
+	if err != nil {
+		return err
+	}
+	defer cleanupDockerfile()
+	if injected {
+		task.appendOutput("[已为 Go 依赖下载注入默认模块代理]\n")
+	}
+	args, err := releaseBuildArgs(body, effectiveDockerfile)
 	if err != nil {
 		return err
 	}
@@ -421,6 +431,60 @@ func (s *Server) releaseBuildStream(ctx context.Context, body releaseRunRequest,
 	cmd = exec.CommandContext(ctx, "docker", "push", body.Image)
 	cmd.Env = dockerEnv
 	return runReleaseCommand(cmd, task)
+}
+
+// prepareGoProxyDockerfile only changes the Dockerfile supplied to this build,
+// never the repository checkout. Older Go Dockerfiles often rely on the
+// unreachable public proxy; add defaults only when they did not declare one.
+// User-supplied GOPROXY/GOSUMDB Build Args still take precedence over defaults.
+func prepareGoProxyDockerfile(sourcePath, originalName string) (string, func(), bool, error) {
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		return "", nil, false, err
+	}
+	if info.Size() > maxDockerfileBytes {
+		return originalName, func() {}, false, nil
+	}
+	content, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return "", nil, false, err
+	}
+	if !needsGoProxyInjection(string(content)) {
+		return originalName, func() {}, false, nil
+	}
+	file, err := os.CreateTemp("", "claude-agent-go-proxy-*.Dockerfile")
+	if err != nil {
+		return "", nil, false, err
+	}
+	path := file.Name()
+	if _, err = file.WriteString(injectGoProxyDefaults(string(content))); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return "", nil, false, err
+	}
+	if err = file.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", nil, false, err
+	}
+	return path, func() { _ = os.Remove(path) }, true, nil
+}
+
+func needsGoProxyInjection(content string) bool {
+	return regexp.MustCompile(`(?im)^\s*RUN\s+.*\bgo\s+mod\s+download\b`).MatchString(content) &&
+		!regexp.MustCompile(`(?im)^\s*(?:ARG|ENV)\s+.*\bGOPROXY\b`).MatchString(content)
+}
+
+func injectGoProxyDefaults(content string) string {
+	const defaults = "ARG GOPROXY=https://goproxy.cn,direct\nARG GOSUMDB=sum.golang.google.cn\nENV GOPROXY=${GOPROXY} GOSUMDB=${GOSUMDB}\n"
+	var out strings.Builder
+	for _, line := range strings.SplitAfter(content, "\n") {
+		out.WriteString(line)
+		trimmed := strings.TrimSpace(strings.TrimSuffix(line, "\n"))
+		if strings.HasPrefix(strings.ToUpper(trimmed), "FROM ") {
+			out.WriteString(defaults)
+		}
+	}
+	return out.String()
 }
 
 type releaseLogWriter struct{ task *releaseTask }

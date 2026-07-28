@@ -1,6 +1,11 @@
 package server
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func boolPtr(value bool) *bool { return &value }
 
@@ -59,5 +64,51 @@ func TestReleaseTaskReturnsRedactedIncrementalOutput(t *testing.T) {
 	second := task.snapshot(offset)
 	if second["output"] != "#4 DONE\n" {
 		t.Fatalf("unexpected incremental output: %#v", second["output"])
+	}
+}
+
+func TestPrepareGoProxyDockerfileInjectsDefaultsWithoutChangingSource(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "Dockerfile")
+	original := "FROM golang:1.25-alpine\nWORKDIR /build\nRUN go mod download\n"
+	if err := os.WriteFile(source, []byte(original), 0600); err != nil {
+		t.Fatal(err)
+	}
+	generated, cleanup, injected, err := prepareGoProxyDockerfile(source, "Dockerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if !injected || generated == "Dockerfile" {
+		t.Fatalf("expected injected temporary Dockerfile: %q, %v", generated, injected)
+	}
+	data, err := os.ReadFile(generated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "ARG GOPROXY=https://goproxy.cn,direct") ||
+		!strings.Contains(string(data), "ENV GOPROXY=${GOPROXY} GOSUMDB=${GOSUMDB}") {
+		t.Fatalf("missing proxy defaults: %s", data)
+	}
+	unchanged, err := os.ReadFile(source)
+	if err != nil || string(unchanged) != original {
+		t.Fatalf("source Dockerfile was modified: %q, %v", unchanged, err)
+	}
+}
+
+func TestPrepareGoProxyDockerfileKeepsExplicitProxy(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "Dockerfile")
+	content := "FROM golang:1.25-alpine\nARG GOPROXY=https://internal.example\nRUN go mod download\n"
+	if err := os.WriteFile(source, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	generated, cleanup, injected, err := prepareGoProxyDockerfile(source, "Dockerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if injected || generated != "Dockerfile" {
+		t.Fatalf("explicit proxy should be preserved: %q, %v", generated, injected)
 	}
 }
