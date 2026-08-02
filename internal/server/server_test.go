@@ -121,7 +121,9 @@ func TestChatFullRoundtripOverWebSocket(t *testing.T) {
 		t.Fatalf("应为 ready: %+v", ev)
 	}
 
-	if err := c.WriteJSON(map[string]any{"type": "user_message", "text": "执行 echo hi"}); err != nil {
+	if err := c.WriteJSON(map[string]any{
+		"type": "user_message", "turn_id": "turn-ws-1", "text": "执行 echo hi",
+	}); err != nil {
 		t.Fatalf("WriteJSON: %v", err)
 	}
 
@@ -135,6 +137,9 @@ func TestChatFullRoundtripOverWebSocket(t *testing.T) {
 	}
 	if perm == nil || perm["request_id"] != "perm_1" {
 		t.Fatalf("未收到权限请求: %+v", perm)
+	}
+	if perm["turn_id"] != "turn-ws-1" {
+		t.Fatalf("权限事件缺少 turn_id: %+v", perm)
 	}
 
 	if err := c.WriteJSON(map[string]any{
@@ -153,5 +158,8 @@ func TestChatFullRoundtripOverWebSocket(t *testing.T) {
 	}
 	if result == nil || result["result"] != "完成" {
 		t.Fatalf("未收到正确 result: %+v", result)
+	}
+	if result["turn_id"] != "turn-ws-1" {
+		t.Fatalf("result 缺少 turn_id: %+v", result)
 	}
 }

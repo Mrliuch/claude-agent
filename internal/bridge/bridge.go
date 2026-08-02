@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"claude-agent/internal/config"
 	"claude-agent/internal/protocol"
@@ -26,9 +27,12 @@ type Bridge struct {
 	settingsPath string // 本连接用户私有凭据写出的临时 --settings 文件（Close 时删除）
 	mcpPath      string // 本连接用户 MCP 临时配置（Close 时删除）
 
-	writeMu    sync.Mutex
-	closeOnce  sync.Once
-	reqCounter int
+	writeMu     sync.Mutex
+	closeOnce   sync.Once
+	reqCounter  int
+	turnMu      sync.RWMutex
+	activeTurn  string
+	turnCounter uint64
 
 	// AskUserQuestion：缓存原始 questions（control_request 阶段）与用户答案（question_response 阶段）
 	askMu        sync.Mutex
@@ -122,12 +126,85 @@ func (b *Bridge) buildArgs() []string {
 	return args
 }
 
-// SendUserMessage 向 claude 发送一条用户消息。
+// SendUserMessage 向 claude 发送一条用户消息。保留该入口供内置 Web UI/微信通道
+// 兼容使用；中继调用方应优先使用 StartTurn 并显式传入 turnID。
 func (b *Bridge) SendUserMessage(text string) error {
-	return b.write(map[string]any{
+	return b.StartTurn("", text)
+}
+
+// StartTurn 原子地开启一轮任务。同一 Bridge 只允许一个活跃回合，避免调用方在
+// 上一轮尚未收到 result 时把新消息写入同一个 Claude stdin，造成迟到事件串线。
+func (b *Bridge) StartTurn(turnID, text string) error {
+	b.turnMu.Lock()
+	if b.activeTurn != "" {
+		active := b.activeTurn
+		b.turnMu.Unlock()
+		if turnID == "" {
+			turnID = b.nextTurnID()
+		}
+		b.events <- map[string]any{
+			"type": "error", "code": "turn_busy", "msg": "当前任务仍在执行",
+			"turn_id": turnID, "active_turn_id": active,
+		}
+		return fmt.Errorf("turn busy: %s", active)
+	}
+	if turnID == "" {
+		turnID = b.nextTurnID()
+	}
+	b.activeTurn = turnID
+	b.turnMu.Unlock()
+
+	if err := b.write(map[string]any{
 		"type":    "user",
 		"message": map[string]any{"role": "user", "content": text},
-	})
+	}); err != nil {
+		b.clearTurn(turnID)
+		return err
+	}
+	return nil
+}
+
+func (b *Bridge) nextTurnID() string {
+	return fmt.Sprintf("turn_%d", atomic.AddUint64(&b.turnCounter, 1))
+}
+
+// TurnActive 用于服务端空闲回收：Claude 正在执行工具时即使长时间没有客户端输入，
+// 也不能被误判为空闲连接。
+func (b *Bridge) TurnActive() bool {
+	b.turnMu.RLock()
+	defer b.turnMu.RUnlock()
+	return b.activeTurn != ""
+}
+
+func (b *Bridge) activeTurnID() string {
+	b.turnMu.RLock()
+	defer b.turnMu.RUnlock()
+	return b.activeTurn
+}
+
+func (b *Bridge) clearTurn(turnID string) {
+	b.turnMu.Lock()
+	if b.activeTurn == turnID {
+		b.activeTurn = ""
+	}
+	b.turnMu.Unlock()
+}
+
+func (b *Bridge) tagTurn(ev map[string]any) string {
+	turnID := b.activeTurnID()
+	if turnID != "" && ev["type"] != "ready" {
+		ev["turn_id"] = turnID
+	}
+	return turnID
+}
+
+func terminalEvent(ev map[string]any) bool {
+	switch ev["type"] {
+	case "result", "error", "closed":
+		return true
+	default:
+		return false
+	}
 }
 
 // RespondPermission 回应一次权限请求。
@@ -284,7 +361,11 @@ func (b *Bridge) readLoop(stdout, stderr io.Reader) {
 				}
 				if ok {
 					for _, e := range b.processEvents(ev) {
+						turnID := b.tagTurn(e)
 						b.events <- e
+						if terminalEvent(e) {
+							b.clearTurn(turnID)
+						}
 					}
 				}
 			}
@@ -303,7 +384,10 @@ func (b *Bridge) readLoop(stdout, stderr io.Reader) {
 	if b.cmd != nil {
 		_ = b.cmd.Wait()
 	}
-	b.events <- map[string]any{"type": "closed", "stderr": strings.TrimSpace(errMsg)}
+	closed := map[string]any{"type": "closed", "stderr": strings.TrimSpace(errMsg)}
+	turnID := b.tagTurn(closed)
+	b.events <- closed
+	b.clearTurn(turnID)
 	close(b.events)
 }
 

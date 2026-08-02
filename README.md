@@ -104,6 +104,9 @@ AGENT_TOKEN=$(openssl rand -hex 24) ./claude-agent
 > `claude --help` 可检查）。请保持 Claude Code 为最新版本；agent 的 `/agent/version` 接口会返回
 > `project_skills_supported`，平台专家配置页会对不支持的目标机提示升级。
 
+> 🔁 **原地升级安全。** 再次执行安装包内的 `install.sh` 会保留已有 Token、端口、运行用户、
+> Claude 路径与工作目录；只有显式传入同名环境变量时才覆盖。
+
 ---
 
 ## 微信 ClawBot 接入（多账号）
@@ -261,7 +264,7 @@ WebSocket：`GET /agent/chat?token=<AGENT_TOKEN>[&session_id=<id>]`
 **客户端 → 服务端**
 
 ```jsonc
-{ "type": "user_message", "text": "看看磁盘占用" }
+{ "type": "user_message", "turn_id": "turn_123", "text": "看看磁盘占用" }
 { "type": "user_message", "text": "/context" }   // 原生斜杠命令同样可用
 { "type": "permission_response", "request_id": "...", "allow": true, "tool_input": { } }
 { "type": "close" }
@@ -282,6 +285,12 @@ WebSocket：`GET /agent/chat?token=<AGENT_TOKEN>[&session_id=<id>]`
 | `result` | 本轮汇总：`subtype`、`is_error`、`duration_ms`、`total_cost_usd`、`result`。 |
 | `error` | `{msg}`。 |
 | `closed` | `claude` 退出；含 `stderr` 尾部。 |
+
+`turn_id` 可由中继传入；缺省时 agent 自动生成。除 `ready` 外，本轮所有下行事件都会
+携带相同 `turn_id`。一轮未结束时再次发送 `user_message`，agent 返回
+`error{code:"turn_busy", active_turn_id:"..."}`，不会把新任务写入仍在运行的 Claude 回合。
+中继还可在 WebSocket 握手中发送 `X-Claude-Disable-Background-Tasks: 1`，只对当前连接
+禁用 Bash `run_in_background`；活跃回合不受 `CLAUDE_IDLE_TIMEOUT` 回收。
 
 ### 文件管理 HTTP API
 

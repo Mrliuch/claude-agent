@@ -141,3 +141,45 @@ func TestBridgeInterruptEndsTurn(t *testing.T) {
 		t.Fatalf("中断结果错误: %+v", res)
 	}
 }
+
+func TestBridgeTurnIDAndBusyIsolation(t *testing.T) {
+	b := bridge.NewBridge(config.Config{ClaudeBin: fakeClaudePath, WorkDir: "/tmp"})
+	if err := b.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer b.Close()
+	<-b.Events() // ready
+
+	if err := b.StartTurn("turn-old", "执行点啥"); err != nil {
+		t.Fatalf("StartTurn: %v", err)
+	}
+	events := collectUntil(t, b.Events(), "permission_request", 10)
+	for _, ev := range events {
+		if ev["turn_id"] != "turn-old" {
+			t.Fatalf("事件未绑定旧回合: %+v", ev)
+		}
+	}
+
+	if err := b.StartTurn("turn-new", "不应重叠"); err == nil {
+		t.Fatal("活跃回合中应拒绝第二条任务")
+	}
+	busy := <-b.Events()
+	if busy["code"] != "turn_busy" || busy["turn_id"] != "turn-new" ||
+		busy["active_turn_id"] != "turn-old" {
+		t.Fatalf("busy 事件错误: %+v", busy)
+	}
+
+	if err := b.RespondPermission("perm_1", false, nil); err != nil {
+		t.Fatalf("RespondPermission: %v", err)
+	}
+	events = collectUntil(t, b.Events(), "result", 10)
+	if result := findEvent(events, "result"); result == nil || result["turn_id"] != "turn-old" {
+		t.Fatalf("旧回合 result 未正确标记: %+v", result)
+	}
+	if b.TurnActive() {
+		t.Fatal("result 后回合仍被标记为活跃")
+	}
+	if err := b.StartTurn("turn-next", "下一轮"); err != nil {
+		t.Fatalf("上一轮完成后应允许新任务: %v", err)
+	}
+}

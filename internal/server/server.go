@@ -229,6 +229,11 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			cfg.DevelopmentSystemPrompt = string(data)
 		}
 	}
+	// 企微机器人等中继通道可按连接禁用 Claude 原生 run_in_background，避免后台
+	// 完成通知滞留到下一轮；不改变同一 Agent 的 Web UI、微信等其它连接。
+	if strings.TrimSpace(r.Header.Get("X-Claude-Disable-Background-Tasks")) == "1" {
+		cfg.DisableBackgroundTasks = true
+	}
 	applyTaskAuditHeaders(&cfg, r.Header)
 	// 企业微信发送与任务归档同样只按当前连接注入，避免共享 agent 用户继承其他人的权限。
 	if v := strings.TrimSpace(r.Header.Get("X-Claude-Wecom-Send-Url")); len(v) <= 512 &&
@@ -287,7 +292,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				last := time.Unix(0, lastActivity.Load())
-				if time.Since(last) >= idle {
+				if !b.TurnActive() && time.Since(last) >= idle {
 					_ = conn.WriteControl(websocket.CloseMessage,
 						websocket.FormatCloseMessage(websocket.CloseNormalClosure, "idle timeout"),
 						time.Now().Add(writeWait))
@@ -299,6 +304,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for ev := range b.Events() {
+		lastActivity.Store(time.Now().UnixNano())
 		conn.SetWriteDeadline(time.Now().Add(writeWait))
 		if err := conn.WriteJSON(ev); err != nil {
 			return
@@ -350,7 +356,7 @@ func handleClientMessage(b *bridge.Bridge, data []byte) {
 	switch msg["type"] {
 	case "user_message":
 		if text := protocol.StrOr(msg["text"], ""); text != "" {
-			_ = b.SendUserMessage(text)
+			_ = b.StartTurn(protocol.StrOr(msg["turn_id"], ""), text)
 		}
 	case "permission_response":
 		if reqID := protocol.StrOr(msg["request_id"], ""); reqID != "" {

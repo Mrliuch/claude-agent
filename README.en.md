@@ -86,6 +86,7 @@ All configuration is via environment variables.
 | `CLAUDE_PERMISSION_MODE` | Passed to `claude --permission-mode`. Keep `default` so dangerous ops prompt. | `default` |
 | `CLAUDE_IDLE_TIMEOUT` | Seconds of inactivity before the session (and the `claude` child process) is reaped. `0` = disabled. | `1800` |
 | `AGENT_DEBUG` | Set to any value to log raw bridge traffic. | _(empty)_ |
+| `CLAUDE_DISABLE_BACKGROUND_TASKS` | Set to `on` to inject `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` and remove Bash `run_in_background`. | `off` |
 | `AGENT_WECHAT` | Set to `on` to enable [WeChat ClawBot integration](#wechat-clawbot-integration-multi-account). | `off` |
 | `AGENT_WECHAT_TOKEN_PATH` | Directory holding per-account tokens. | `~/.config/claude-agent/wechat/` |
 | `AGENT_WECHAT_BASEURL` | iLink endpoint (rarely changed; handy for mocking in tests). | `https://ilinkai.weixin.qq.com` |
@@ -97,6 +98,9 @@ All configuration is via environment variables.
 > 🔒 **The web console is now authenticated.** Visiting `/` requires the `AGENT_TOKEN` (same token
 > as WebSocket); after login a cookie is set, and an unauthenticated request only gets the login
 > page. Use `AGENT_UI=off` to disable the page entirely.
+
+> 🔁 **Safe in-place upgrades.** Re-running the packaged `install.sh` preserves the existing token,
+> port, run user, Claude path, and work directory unless an override is explicitly supplied.
 
 ---
 
@@ -257,7 +261,7 @@ Health check: `GET /healthz` → `{"status":"ok"}`
 **Client → server**
 
 ```jsonc
-{ "type": "user_message", "text": "check disk usage" }
+{ "type": "user_message", "turn_id": "turn_123", "text": "check disk usage" }
 { "type": "user_message", "text": "/context" }   // native slash commands work too
 { "type": "permission_response", "request_id": "...", "allow": true, "tool_input": { } }
 { "type": "close" }
@@ -278,6 +282,13 @@ Health check: `GET /healthz` → `{"status":"ok"}`
 | `result` | Turn summary: `subtype`, `is_error`, `duration_ms`, `total_cost_usd`, `result`. |
 | `error` | `{msg}`. |
 | `closed` | `claude` exited; `stderr` tail included. |
+
+A relay may provide `turn_id`; the agent generates one when omitted. Every downstream event except
+`ready` carries that same ID. A second `user_message` while a turn is active is rejected with
+`error{code:"turn_busy", active_turn_id:"..."}` instead of being written into the running Claude
+turn. Relays may also send `X-Claude-Disable-Background-Tasks: 1` during the WebSocket handshake to
+disable Bash `run_in_background` for that connection only. Active turns are never reaped by the idle
+timeout.
 
 ### File-manager HTTP API
 

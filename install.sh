@@ -12,6 +12,9 @@
 #   RUN_USER           运行 agent 的系统用户（默认 root；该用户须能正常执行 claude）
 #   CLAUDE_BIN         claude CLI 路径（默认在 RUN_USER 环境下自动探测）
 #   CLAUDE_WORK_DIR    claude 工作目录围栏（默认 RUN_USER 的 HOME）
+#
+# 重复执行视为原地升级：未显式传入的 Token、监听地址、Claude 路径、工作目录和
+# 运行用户均从现有安装保留，不会因升级导致平台保存的共享 Token 失效。
 set -euo pipefail
 
 INSTALL_DIR=/opt/claude-agent
@@ -21,20 +24,33 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 err() { echo "[安装失败] $*" >&2; exit 1; }
 log() { echo "[claude-agent] $*"; }
 
+existing_env() {
+    local key="$1"
+    [ -f "$INSTALL_DIR/agent.env" ] || return 0
+    sed -n "s/^${key}=//p" "$INSTALL_DIR/agent.env" | tail -1
+}
+
 [ "$(id -u)" = "0" ] || err "请用 root 执行：sudo ./install.sh"
 [ -f "$SCRIPT_DIR/claude-agent" ] || err "未找到 claude-agent 二进制（须与本脚本同目录）"
 command -v systemctl >/dev/null || err "未找到 systemd（systemctl），请参考 agent/README.md 手动部署"
 
+if [ -z "${RUN_USER+x}" ] && [ -f "$UNIT_FILE" ]; then
+    RUN_USER="$(sed -n 's/^User=//p' "$UNIT_FILE" | tail -1)"
+fi
 RUN_USER="${RUN_USER:-root}"
 id "$RUN_USER" >/dev/null 2>&1 || err "系统用户不存在: $RUN_USER"
 
 # 前置检查：运行用户必须已配好 claude CLI（凭据/网关沿用其自身配置作共享默认）
+if [ -z "${CLAUDE_BIN+x}" ]; then CLAUDE_BIN="$(existing_env CLAUDE_BIN)"; fi
 CLAUDE_BIN="${CLAUDE_BIN:-$(su - "$RUN_USER" -c 'command -v claude' 2>/dev/null || true)}"
 if [ -z "$CLAUDE_BIN" ]; then
     err "用户 $RUN_USER 环境中未找到 claude CLI。请先安装并配置 claude code（该用户手动执行 claude 能正常对话），或用 CLAUDE_BIN= 指定路径"
 fi
 log "claude CLI: $CLAUDE_BIN (运行用户: $RUN_USER)"
 
+if [ -z "${AGENT_TOKEN+x}" ]; then AGENT_TOKEN="$(existing_env AGENT_TOKEN)"; fi
+if [ -z "${AGENT_LISTEN_ADDR+x}" ]; then AGENT_LISTEN_ADDR="$(existing_env AGENT_LISTEN_ADDR)"; fi
+if [ -z "${CLAUDE_WORK_DIR+x}" ]; then CLAUDE_WORK_DIR="$(existing_env CLAUDE_WORK_DIR)"; fi
 AGENT_TOKEN="${AGENT_TOKEN:-$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
 AGENT_LISTEN_ADDR="${AGENT_LISTEN_ADDR:-:8765}"
 CLAUDE_WORK_DIR="${CLAUDE_WORK_DIR:-$(eval echo "~$RUN_USER")}"
@@ -73,7 +89,7 @@ sleep 1
 PORT="${AGENT_LISTEN_ADDR##*:}"
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 if systemctl is-active --quiet claude-agent; then
-    log "✅ 安装完成，服务已启动"
+    log "✅ 安装/升级完成，服务已启动"
 else
     systemctl status claude-agent --no-pager | tail -5 || true
     err "服务启动失败，请查看: journalctl -u claude-agent -n 50"
