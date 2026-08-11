@@ -42,6 +42,7 @@ VM。`claude-agent` 给那台机器一个轻量、可审计的远程操控面：
   `.claude/skills/<名称>/SKILL.md` 可被 Claude Code 自动发现或通过 `/技能名` 显式调用。
 - **系统 MCP 只读目录** —— `/agent/catalog` 同时扫描 `~/.claude.json` 与
   `~/.claude/system-mcp.json`；后者仅登记服务名称，不能存放共享令牌。实际 MCP 凭据由上游中继按连接、按用户注入临时配置。
+- **连接级 SSE MCP** —— 上游注入的 `sse` transport 会原样写入权限 `0600` 的临时 MCP 配置；HTTP(S) 继续使用 Streamable HTTP，未知 transport 在启动 Claude 前拒绝。
 
 ---
 

@@ -149,3 +149,48 @@ func TestWriteUserSettings_FileContent(t *testing.T) {
 		t.Fatalf("落盘应含用户 token，got %q", parsed.Env["ANTHROPIC_AUTH_TOKEN"])
 	}
 }
+
+func TestWriteUserMCPConfig_PreservesSSETransport(t *testing.T) {
+	raw := `[{"name":"Cloudpods","transport":"sse","endpoint_or_command":"https://mcp.example/sse","headers":{"X-API-Key":"secret"}}]`
+	path, err := writeUserMCPConfig(raw)
+	if err != nil {
+		t.Fatalf("writeUserMCPConfig 失败: %v", err)
+	}
+	defer os.Remove(path)
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat 失败: %v", err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Fatalf("MCP 配置文件应为 0600，got %v", fi.Mode().Perm())
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("读取 MCP 配置失败: %v", err)
+	}
+	var parsed struct {
+		MCPServers map[string]struct {
+			Type    string            `json:"type"`
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("内容非合法 JSON: %v", err)
+	}
+	server := parsed.MCPServers["Cloudpods"]
+	if server.Type != "sse" || server.URL != "https://mcp.example/sse" {
+		t.Fatalf("SSE transport 未保留: %#v", server)
+	}
+	if server.Headers["X-API-Key"] != "secret" {
+		t.Fatal("SSE 请求头未写入临时配置")
+	}
+}
+
+func TestWriteUserMCPConfig_RejectsUnknownTransport(t *testing.T) {
+	_, err := writeUserMCPConfig(`[{"name":"bad","transport":"websocket","endpoint_or_command":"wss://example.test"}]`)
+	if err == nil {
+		t.Fatal("未知 transport 必须被拒绝")
+	}
+}

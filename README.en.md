@@ -39,6 +39,8 @@ thin, auditable remote-control surface:
   if you'd rather not expose the agent directly.
 - **Project Skill discovery** — every session loads user, project, and local setting sources, so
   `.claude/skills/<name>/SKILL.md` under the working directory is discovered automatically or can be invoked with `/skill-name`.
+- **Connection-scoped SSE MCP** — an injected `sse` transport remains SSE in the temporary
+  `0600` MCP config; HTTP(S) remains Streamable HTTP and unknown transports are rejected before Claude starts.
 
 ---
 

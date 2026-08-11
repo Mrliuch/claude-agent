@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,10 +39,16 @@ func writeUserMCPConfig(raw string) (string, error) {
 		if name == "" || endpoint == "" {
 			continue
 		}
-		if row.Transport == "stdio" {
+		transport := strings.ToLower(strings.TrimSpace(row.Transport))
+		switch transport {
+		case "stdio":
 			servers[name] = map[string]any{"command": endpoint, "args": row.Args, "env": row.Env}
-		} else {
+		case "sse":
+			servers[name] = map[string]any{"type": "sse", "url": endpoint, "headers": row.Headers}
+		case "", "http", "https":
 			servers[name] = map[string]any{"type": "http", "url": endpoint, "headers": row.Headers}
+		default:
+			return "", fmt.Errorf("MCP %q transport 不受支持: %s", name, transport)
 		}
 	}
 	payload, err := json.Marshal(map[string]any{"mcpServers": servers})
