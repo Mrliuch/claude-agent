@@ -72,6 +72,12 @@ AGENT_TOKEN=$(openssl rand -hex 24) ./claude-agent
 > Web 控制台从同源的 `/` 提供，没有 CORS 障碍。你在浏览器里粘贴的 token **不会**被写进下发的
 > HTML。
 
+### GitHub 发布构建
+
+推送 `v*` 标签会自动触发 GitHub Actions 的 `Release` 工作流并发布安装包。若历史标签需要补建，
+可在 GitHub 仓库的 **Actions → Release → Run workflow** 中填写既有标签（例如 `v1.6.1`）手动触发；
+工作流会检出该标签对应的源码，并将构建产物附加到同名 GitHub Release。
+
 ---
 
 ## 配置

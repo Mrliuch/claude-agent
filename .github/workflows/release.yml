@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要构建并发布的既有版本标签（例如 v1.6.1）"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
       - uses: actions/setup-go@v5
         with:
@@ -28,7 +36,11 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${{ inputs.tag || github.ref_name }}"
+          case "$VERSION" in
+            v*) ;;
+            *) echo "版本标签必须以 v 开头" >&2; exit 1 ;;
+          esac
           mkdir -p dist
 
           # linux 安装包（含 install.sh，供运维平台 /api/ai/agent-package 下载及 Docker 镜像打包）
@@ -65,6 +77,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "claude-agent ${{ github.ref_name }}"
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: "claude-agent ${{ inputs.tag || github.ref_name }}"
           generate_release_notes: true
           files: dist/*
